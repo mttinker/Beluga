@@ -30,20 +30,22 @@ Make_matrix <- function(M0,Sn,Sc,Sy,Sa,Pr) {
   return(M)
 }
 M = Make_matrix(M0,Sn,Sc,Sy,Sa,Pr)
+# get stable state distribution (ssd)
 eigs = eigen(M)
 lambda = eigs$values[1]
 W=abs(eigen(M)$vectors[,1]) # W=matrix of right eigenvectors 
 ssd = W/sum(W)              # stable stage distribution
 n = 1000 * ssd
+# annual demographic transitions accomplished with single matrix mult
 n = M %*% n
 # Use "Death Matrix" to create expected death assemblage for 9 age classes (0yr, 1:8+)
 DM = diag(1,9,9)*c(1-Sc,1-Sy,rep((1-Sa),7))
 # STAN version: DM and nt and nd declared as local variables, and 
 #  DM = add_diag(rep_matrix(0,9,9),[1-Sc,1-Sy,rep_vector((1-Sa),7)]) ;
-nt = c(n[1:8],sum(n[9:12]))
-# Matrix multiplication to get dead by age class 
+nt = c(n[1:8],sum(n[9:12]))  # Age-based vector (9 classes instead of 12)
+# Matrix multiplication to get # dead by age class 
 nd = DM %*% nt
-# adjust age 0 to add newborns who are born and die before next survey
+# adjust age0 to add newborns who are born and die before next survey
 nd[1] = nd[1] + n[11] * Sa * (1-Sn)
 
 # ADDITIONAL NOTES:
@@ -54,10 +56,11 @@ nd[1] = nd[1] + n[11] * Sa * (1-Sn)
 #    - haz_A = exp(-5 + gamma_A + epsA)
 #    - haz_Y = exp(-5 + gamma_A + gamma_Y + epsA)
 #    - haz_0 = exp(-5 + gamma_A + gamma_Y + gamma_0 + eps0)
-# - age0 log hazards stochastic (hierarchical random effect)
+# - age0 log hazards include stochastic hierarchical random effect (eps0))
 # - for yearling/adults, also stochastic? use scaled value of eps0, or independent epsA?
 # - preg rate stochastic also? may not be identifiable from newborn mortality...
 # - spit age0 hazards between newborn and calf survival, i.e. Sn = exp(-1*haz_0*fraction_nb)  
+# - add density dependence term to haz_0? or other covariates to pregnancy and survival? 
 #  
 # Example of user function in STAN with vector (should also work with matrix):
 #  (the example function standardizes a vector variable to have a mean of 0 
