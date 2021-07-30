@@ -38,6 +38,9 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 
+# Compiled executables
+.exe
+
 # Resuts files
 /results/
 /results/*.*
