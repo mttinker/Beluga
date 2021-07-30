@@ -1,153 +1,208 @@
 // Beluga model
 // This Stan code executes an age-structured population model for St Lawrence
-//  Belugas, fit to surey data, mortaliy data and harvest data
+//  Belugas, fit to surey data and stranding data 
 //
 functions {
-  // user function to create projection matrix
-  matrix makemat(int Ns, vector G, vector S) {
-     matrix[Ns,Ns] M; M = rep_matrix(0,Ns,Ns) ;
-     M[1:(Ns-1),1:(Ns-1)] = add_diag(M[1:(Ns-1),1:(Ns-1)], S[1:(Ns-1)] .* (1 -  G[1:(Ns-1)])) ;
-     M[2:Ns,1:(Ns-1)] = add_diag(M[2:Ns,1:(Ns-1)], S[1:(Ns-1)] .* G[1:(Ns-1)]) ;
-     return M;
+  // user function to create demog. transition projection matrix
+  matrix makemat(int NSt, real Pr, real Snn, real Sn, real Sy, real Sa) {
+    // Snn = survival of neonatal calves from birth to Sept survey
+    matrix[NSt,NSt] M = rep_matrix(0,NSt,NSt) ;
+    M[1,11] = Sa * Snn ;
+    M[2,1] = Sn ;
+    M[3,2] = Sy ;
+    M[4:8,3:7] = add_diag(M[4:8,3:7], rep_vector(Sa,5)) ;
+    M[9,8] = Sa/2 ;    
+    M[9,9] = Sa ;
+    M[10,8] = Sa/2 * (1-Pr) ;
+    M[11,8] = Sa/2 * Pr ;
+    M[11,10] = Sa * Pr ;
+    M[10,10] = Sa * (1-Pr) ;
+    M[12,11] = Sa * Snn ;
+    M[10,11] = Sa * (1-Snn) ;
+    M[10,12] = Sa * (Sn + (1-Sn) * (1-Pr)) ;
+    M[11,12] = Sa * (1-Sn) * Pr ;
+    return M ;
+  }
+  // user function to create mortality projection matrix
+  matrix makeDmat(int Nag, real Sn, real Sy, real Sa) {
+    matrix[Nag,Nag] D = rep_matrix(0,Nag,Nag) ;
+    D[1,1] = 1-Sn ;
+    D[2,2] = 1-Sy ;
+    D[3:Nag,3:Nag] = add_diag(D[3:Nag,3:Nag], rep_vector((1-Sa),(Nag-2) )) ;
+    return D ;
   }
 }
 // Section 1. Data inputs for model
 data {
-  int<lower=1> Nyrs ;            // Total years of counts (if 2011-2020 then 10)
-  int<lower=1> YrB ;             // Year before temporal break (if 2013 then 3)
-  int<lower=1> Nsz ;             // Number size classes (assumed to be 10)
-  vector[Nsz-1] Gr ;             // Growth transition probs for size classes
-  simplex[Nsz] SZinit ;          // Initial size distribution
-  vector[Nsz] lgtPD ;            // baseline logit detection fxn
-  vector[Nyrs] Obs_Tot ;         // Observed total densities by year
-  int Obs_Sz[Nyrs,Nsz] ;         // Observed "counts" by size class, by year
-  real R0pri ;                   // prior for log mean Recruitment (R)
-  real N0pri ;                   // prior for initial abundance
-  vector[Nsz] Zeros ;            // vector of zeros (to make recruitment vector)
-  real gamma0 ;                  // baseline log hazards
-  real invscpri ;                // inverse scale param for gamma dist. densities
+  int<lower=1> Nyrs ;            // Years of dynamics 
+  int<lower=1> NyrsH ;           // Years for which harvest occured
+  int<lower=1> NStg ;            // Number stages
+  int<lower=1> NAge ;            // Number age classes 
+  int<lower=1> Nsrv ;            // Number surveys
+  int<lower=1> Nstr ;            // Number stranding counts
+  int<lower=1> YrSv[Nsrv] ;      // Year index for surveys
+  int<lower=1> YrSt[Nstr] ;      // Year index for stranding counts
+  vector<lower=0>[Nsrv] ObsS ;   // Observed survey estimates
+  vector<lower=0>[Nsrv] invSc ;  // inverse scale (precision) for survey counts
+  real<lower=0,upper=1> PJ[Nsrv];// Proportion juveniles in surveys
+  int<lower=0> StrNB[Nstr] ;     // Stranding counts of newborns
+  int<lower=0> StrOA[Nstr] ;     // Stranding counts of older animals
+  //int<lower=0> Agects[Nstr,NAge];// matrix of adult counts by age class (cols) & year (rows)
+  simplex[NStg] ssd ;            // Initial stage distribution
+  vector<lower=0>[NyrsH] Harv ;  // Harvest totals by year
+  real upsilon ;                 // precision param for ppn juveniles
 }
 // Section 2. The parameters to be estimated 
 parameters {
-  real<lower=0> tau ;             // precision param for Dirichelet ditribution
-  real<lower=0> invscale ;        // inverse scale param for Gamma ditribution
-  real<lower=-10,upper=10> phiDmn;// mean change in detect prob post break, logit 
-  real<lower=-5,upper=5> phiSmn ; // mean change in log hazards post break, ratio 
-  real<lower=-2,upper=5> phiRmn ; // mean change in log recruit post break, ratio 
-  real<lower=0> sigD1 ;           // variation in detect prob pre break, logit 
-  real<lower=0> sigS1 ;           // variation in log hazards pre break, ratio 
-  real<lower=0> sigR1 ;           // variation in log recruit pre break, ratio   
-  real<lower=0> sigD   ;          // variation in detect prob post break, logit 
-  real<lower=0> sigS   ;          // variation in log hazards post break, ratio 
-  real<lower=0> sigR   ;          // variation in log recruit post break, ratio   
-  vector[Nyrs] phiD ;             // random effect, detect prob by year
-  vector[Nyrs] phiS ;             // random effect, baseline survival by year
-  vector[Nyrs] phiR ;             // random effect, baseline recruitment by year
-  simplex[Nsz] pie[Nyrs] ;        // predicted size dist. with overdispersion
+  real<lower=0> logNinit ;      // initial log abundance
+  real<lower=0,upper=1.5> gammA ;           // baseline log hazards + 3 (for adults)
+  real<lower=0,upper=2> gamma_Y ;         // log hazard ratio, yearlings vs adults
+  real<lower=0,upper=2> gamma_N ;         // log hazard ratio, newborns vs yearlings
+  real alpha ;                    // logit param for pregancy rate
+  real<lower=0,upper=3> phi ;             // density dependent param
+  real<lower=0,upper=3.5> sig_P ;           // stochasticity in pregancy rates (logit)
+  vector[Nyrs] epsP ;             // z-vec of devs for stoch. effect, Preg
+  real<lower=0,upper=3.5> sig_N ;           // stochasticity in newborn survival (log haz)
+  vector[Nyrs] epsN ;             // z-vec of devs for stoch. effect, NB
+  real gamma_H_mn ;               // mean harvest log hazards  
+  real<lower=0,upper=5> sig_H ;   // variance in harvest log hazards 
+  vector[NyrsH] gamma_H ;         // annual harvest log hazards during early years  
+  real<lower=0,upper=.5> PD_NB ;  // Probability detect newborn carcass
+  real<lower=0,upper=.5> PD_OA ;  // Probability detect older animal carcass
+  // real<lower=0.1,upper=15> upsilon ;// precision param for beta dist, proportion Juv
+  //real<lower=0> tau ;             // precision param for dirichlet-multinomial age dist  
+  //simplex[NAge] pie[Nstr];        // probs of stranding by age (for multinomial)
 } 
 // Section 3. Additional transformed parameters, including key model dynamics
 transformed parameters {
-  vector[Nsz] R1 ;                // initial recruitment 
-  vector[Nsz] S1;                 // initial survival rate
-  vector[Nsz] P1 ;                // initial detection rate
-  matrix[Nsz,Nsz] M1 ;            // initial matrix
-  vector[Nsz] n0      ;           // initil pop vector
-  simplex[Nsz] SzDst[Nyrs] ;      // predicted size dist, all years
-  vector[Nyrs] N ;                // true density, all years
-  vector[Nsz] n[Nyrs] ;           // true population vector, all years
-  vector[Nyrs] D ;                // detectable density, all years
-  vector[Nsz] d[Nyrs] ;           // detectable density by size, all years
-  // Initial Prob detection vector
-  P1 = inv_logit(lgtPD + phiD[1]) ;
-  // Initial survival
-  S1 = rep_vector(exp(-exp(gamma0 + phiS[1])),Nsz)  ;
-  // Initial recruitment
-  R1 = Zeros ;
-  R1[1] = exp(R0pri + phiR[1]) ;
-  // Projection matrix for first year
-  M1 = makemat(Nsz,Gr,S1) ;
-  // Initialize pop vector
-  n0 = N0pri * SZinit ;
-  // Demographic calcs for first year
-  n[1] = M1 * (n0 + R1) ;
-  N[1] = sum(n[1]) ;
-  d[1] = P1 .* n[1] ;
-  D[1] = sum(d[1]) ;
-  SzDst[1] = (d[1] + .00000001) / (D[1] + Nsz * .00000001 ) ;
-  // Loop through remaining years
-  for (t in 2:Nyrs){
-    vector[Nsz] R2 ; 
-    vector[Nsz] S2 ;  
-    vector[Nsz] P2 ;
-    vector[Nsz] nt1 ;
-    matrix[Nsz,Nsz] M2;
-    R2 = Zeros ;
-    P2 = inv_logit(lgtPD + phiD[t] ) ;
-    S2 = rep_vector(exp(-exp(gamma0 + phiS[t] )),Nsz)  ;
-    R2[1] = exp(R0pri + phiR[t]) ;
-    M2 = makemat(Nsz,Gr,S2) ;
-    n[t] = M2 * (n[t-1] + R2) ;
+  real gamma_A = gammA - 3;               // adult log hazards 
+  real haz_A = exp(gamma_A) ;             // adult hazards (natural)
+  real haz_Y = exp(gamma_A + gamma_Y) ;   // yearling hazards (natural)
+  real S_A = exp(-haz_A) ;                // adult survival rate
+  real S_Y = exp(-haz_Y) ;                // yearling survival rate
+  // real Pr = inv_logit(3 + alpha) ;       // pregancy rate (if constant)
+  vector[Nyrs] Pr ;                       // pregancy rate (if variable)
+  vector[Nyrs] eps_P = epsP * sig_P;      // stoch. effects, Preg
+  vector[Nyrs] eps_N = epsN * sig_N;      // stoch. effects, NB
+  vector[NStg] n[Nyrs] ;
+  vector[Nyrs] N ;
+  vector[Nyrs] ppnJ ;
+  vector[Nyrs] nd_NB ;
+  vector[Nyrs] nd_OA ;
+  vector[NyrsH] Harv_expect ;
+  //simplex[NAge] Agvc[Nyrs] ;      // predicted carcass age dist, all years
+  // Year 1
+  N[1] = exp(8.5+logNinit) ;
+  n[1] = N[1] * ssd ;
+  Harv_expect[1] = Harv[1] ;
+  Pr[1] = inv_logit(3 + alpha + eps_P[1]) ;
+  ppnJ[1:NyrsH] = rep_vector(0,NyrsH) ;
+  // Loop through early years with harvest
+  for(t in 2:NyrsH){
+    real haz_H ;
+    real haz_N ;
+    real S_N ;
+    real S_Yh ;
+    real S_Ah ;
+    vector[NAge] nt ;
+    vector[NAge] nd ;
+    matrix[NStg,NStg] M;
+    matrix[NAge,NAge] D;
+    Pr[t] = inv_logit(3 + alpha + eps_P[t]) ;
+    haz_H = exp(gamma_H[t]) ;
+    S_Yh = exp(-1 * (haz_Y + haz_H) ) ;
+    S_Ah = exp(-1 * (haz_A + haz_H) ) ;
+    haz_N = exp(gamma_A + gamma_Y + gamma_N + phi * (N[t-1]/10000) + eps_N[t]) ;
+    S_N = exp(-haz_N) ;
+    M = makemat(NStg,Pr[t],sqrt(S_N),S_N,S_Yh,S_Ah) ;
+    n[t] = M * n[t-1]  ;
     N[t] = sum(n[t]) ;
-    d[t] = P2 .* n[t] ;
-    D[t] = sum(d[t]) ;
-    SzDst[t] = (d[t] + .00000001) / (D[t] + Nsz * .00000001 ) ;
+    nt[1:8] = n[t-1][1:8] ;  
+    nt[9] = sum(n[t-1][9:12]) ;  
+    D = makeDmat(NAge,S_N,S_Yh,S_Ah) ;
+    nd = D * nt ;
+    Harv_expect[t] = (nd[2] * (haz_H/(haz_Y + haz_H))) + 
+                     (sum(nd[3:9]) * (haz_H/(haz_A + haz_H))) ; 
+  }  
+  // loop through remaining years (no harvest)
+  for(t in (NyrsH+1):Nyrs){
+    real haz_N ;
+    real S_N ;
+    vector[NAge] nt ;
+    vector[NAge] nd ;
+    matrix[NStg,NStg] M;
+    matrix[NAge,NAge] D;
+    Pr[t] = inv_logit(3 + alpha + eps_P[t]) ;
+    haz_N = exp(gamma_A + gamma_Y + gamma_N + phi * (N[t-1]/10000) + eps_N[t]) ;
+    S_N = exp(-haz_N) ;
+    M = makemat(NStg,Pr[t],sqrt(S_N),S_N,S_Y,S_A) ;
+    n[t] = M * n[t-1]  ;
+    N[t] = sum(n[t]) ;
+    ppnJ[t] = (0.0001 + sum(n[t][1:2])) / (0.0001 +  N[t]) ;
+    nt[1:8] = n[t-1][1:8] ;  
+    nt[9] = sum(n[t-1][9:12]) ;  
+    D = makeDmat(NAge,S_N,S_Y,S_A) ;
+    nd = D * nt ;
+    nd[1] = nd[1] + n[t-1][11] * S_A * (1-sqrt(S_N)) ;
+    nd_NB[t] = nd[1]+.001 ;
+    nd_OA[t] = sum(nd[2:NAge])+.001 ;
+    //Agvc[t] = (nd + .00000001) / (sum(nd) + NAge * .00000001 ) ; 
   }
 }
 // Section 4. Estimating model parameters (drawing from probability distributions)
 model {
   // A) Observed nodes:
-  // -Uchin Counts, total by year 
-  Obs_Tot ~ gamma(D * invscale, invscale) ; 
-  // -Sizeclass distributions by year 
-  //  NOTE: Use Dirichlet-multinomial distribution for overdispersed size freqs 
-  for(t in 1:Nyrs){
-    pie[t] ~ dirichlet(tau * SzDst[t]);
-    Obs_Sz[t,] ~ multinomial(pie[t]) ;
-  }
+  // - Harvest numbers
+  Harv ~ gamma(Harv_expect * 100, 100) ;
+  // -Survey Estimates, by year. NOTE for gamma, invscale = M / V
+  ObsS ~ gamma(N[YrSv] .* invSc, invSc) ; 
+  // -Proportion juvs (<2yr-olds) 
+  PJ ~ beta(upsilon*ppnJ[YrSv]+.0001,upsilon*(1-ppnJ[YrSv])+.0001 ) ;
+  // -Stranding counts, newborns
+  StrNB ~ poisson( PD_NB * nd_NB[YrSt]) ;     
+  // -Stranding counts, older animals
+  StrOA ~ poisson( PD_OA * nd_OA[YrSt]) ;     
+  // -Age vectors of stranded animals
+  //for(i in 1:Nstr){
+    // NOTE: Use dirichlet-multinomial to handle error/variance in age counts 
+  //  pie[i] ~ dirichlet(10 * tau * Agvc[YrSt[i]]);
+  //  Agects[i,] ~ multinomial(pie[i]) ;
+  //}
+  //
   // B) Prior distributions for model parameters:
   // Hierarchical random effects:  
-  phiD[1:YrB] ~ normal(0, sigD1) ;
-  phiS[1:YrB] ~ normal(0, sigS1) ;
-  phiR[1:YrB] ~ normal(0, sigR1) ;
-  phiD[(YrB+1):Nyrs] ~ normal(phiDmn, sigD) ;
-  phiS[(YrB+1):Nyrs] ~ normal(phiSmn, sigS) ;
-  phiR[(YrB+1):Nyrs] ~ normal(phiRmn, sigR) ;
+  epsP ~ normal(0, 1) ;
+  epsN ~ normal(0, 1) ;
+  gamma_H ~ normal(gamma_H_mn-5,sig_H) ;
   // Base parameter priors:
-  phiDmn ~ normal(0,5) ;
-  phiSmn ~ normal(0,2.5) ;
-  phiRmn ~ normal(0,1) ;
-  sigD ~ normal(0,2) ;
-  sigS ~ normal(0,1) ;
-  sigR ~ normal(0,1) ;
-  sigD1 ~ normal(0,2) ;
-  sigS1 ~ normal(0,1) ;
-  sigR1 ~ normal(0,1) ;  
-  tau ~ normal(35,2.5) ;
-  invscale ~ normal(invscpri, .1*invscpri) ;
+  gamma_H_mn ~ normal(0,1) ;
+  sig_H ~ normal(0,2.5) ;
+  sig_P ~ normal(0,2.5) ;
+  sig_N ~ normal(0,2.5) ;
+  logNinit ~ normal(0,1) ;
+  gammA ~ normal(0,1) ;
+  gamma_Y ~ normal(0,1) ;
+  gamma_N ~ normal(0,1) ;
+  alpha ~ normal(0,1) ;
+  phi ~ normal(0,1) ;
+  PD_NB ~ beta(1,5) ;
+  PD_OA ~ beta(1,5) ;
+  // upsilon ~ cauchy(0,2.5) ;
+  // tau ~ cauchy(0,2.5) ;
 }
 // Section 5. Derived parameters and statistics 
  generated quantities {
-  real log_lik[3*Nyrs] ;        // Log liklihood of obs. data (for LooIC)
-  real ynew[Nyrs]  ;            // New observations (out of sample) for ppc  
-  vector[Nyrs] P_resid;         // Pearson residuals, observed data
-  vector[Nyrs] P_resid_new;     // Pearson residuals, new data
+  real ynew[Nsrv]  ;            // New observations (out of sample) for ppc  
+  vector[Nsrv] P_resid;         // Pearson residuals, observed data
+  vector[Nsrv] P_resid_new;     // Pearson residuals, new data
   real Tstat ;                  // Test statistic, observed data (chi-2)
   real Tstat_new ;              // Test statistic, new data (chi-2)
   real ppp ;                    // posterior predictive P-value 
-  int<lower=0> c;
-  c = 0 ;
-  for (t in 1:Nyrs) {
-    // Summed Log-likelihood of observations
-    c = c+1 ;
-    log_lik[c] = gamma_lpdf(Obs_Tot[t] | D[t] * invscale, invscale) ;      
-    c = c+1 ;
-    log_lik[c] = dirichlet_lpdf(pie[t,] | tau * SzDst[t]) ;
-    c = c+1 ;
-    log_lik[c] = multinomial_lpmf(Obs_Sz[t,] | pie[t]) ;
+  for (t in 1:Nsrv) {
     // Pearson residuals (for gamma distrib. densities only)
-    ynew[t] = gamma_rng(D[t] * invscale, invscale) ;
-    P_resid[t] = square(Obs_Tot[t] - D[t]) / (D[t] / invscale) ;  
-    P_resid_new[t] = square(ynew[t] - D[t]) / (D[t] / invscale) ;  
+    ynew[t] = gamma_rng(N[YrSv[t]] * invSc[t], invSc[t]) ;
+    P_resid[t] = square(ObsS[t] - N[YrSv[t]]) / (N[YrSv[t]]/ invSc[t]) ;  
+    P_resid_new[t] = square(ynew[t] - N[YrSv[t]]) / (N[YrSv[t]]/ invSc[t]) ;  
   }
   Tstat = sum(P_resid) ;
   Tstat_new = sum(P_resid_new) ;

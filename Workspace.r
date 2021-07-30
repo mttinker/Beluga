@@ -3,15 +3,16 @@
 # Beluga matrix with 3 adult female compartments (available, pregnant, with calf)
 M0 = matrix(0, nrow = 12,ncol = 12)
 # Note: stages 1:8 = ages 0-7 (both sexes), 9 = 8+ males, 
-#   10 = 8+ females "available", 11 = 8+ females preg, 12 = 8+ females w. calves 
-Sn = .83   # early newborn survival (birth to time of survey, Sept 1)
-Sc = .8    # calf survival (from 0.5 yr old to 1.5 yr old at next survey)
-Sy = .87   # yearling survival (1.5 to 2.5 year old)
+#   10 = 8+ females "available", 11 = 8+ females preg, 12 = 8+ females w. calves
+# Priors (based on estimates from Mosnier 2014)
+Sc = .76     # calf survival (from 0.5 yr old to 1.5 yr old at next survey)
+Sn = sqrt(Sc) # early newborn survival (birth to time of survey, Sept 1)
+Sy = .9   # yearling survival (1.5 to 2.5 year old)
 Sa = .95   # adult survival (annual survival for 2yr old and older)
-Pr = .9    # pregnancy rate (for "available" females)
+Pr = .77    # pregnancy rate (for "available" females)
 
-Make_matrix <- function(M0,Sn,Sc,Sy,Sa,Pr) {
-  M = M0
+Make_matrix <- function(Sn,Sc,Sy,Sa,Pr) {
+  M = matrix(0, nrow = 12,ncol = 12)
   # or STAN version: matrix[12,12] M; M = rep_matrix(0,12,12) ;
   M[1,11] = Sa * Sn
   M[2,1] = Sc 
@@ -21,15 +22,17 @@ Make_matrix <- function(M0,Sn,Sc,Sy,Sa,Pr) {
   #  or repeat 5 steps, e.g.: M[4,3] = Sa
   M[9,8] = Sa/2     
   M[9,9] = Sa
-  M[10,8] = Sa/2
-  M[10,10] = Sa * (1-Pr)
-  M[10,11] = Sa * (1-Sn)
-  M[10,12] = Sa 
+  M[10,8] = Sa/2 * (1-Pr)
+  M[11,8] = Sa/2 * Pr  
   M[11,10] = Sa * Pr
+  M[10,10] = Sa * (1-Pr)
   M[12,11] = Sa * Sn
+  M[10,11] = Sa * (1-Sn)  
+  M[10,12] = Sa * (Sc + (1-Sc) * (1-Pr))
+  M[11,12] = Sa * (1-Sc) * Pr
   return(M)
 }
-M = Make_matrix(M0,Sn,Sc,Sy,Sa,Pr)
+M = Make_matrix(Sn,Sc,Sy,Sa,Pr)
 # get stable state distribution (ssd)
 eigs = eigen(M)
 lambda = eigs$values[1]
@@ -60,7 +63,7 @@ nd[1] = nd[1] + n[11] * Sa * (1-Sn)
 #    - haz_C = exp(gamma_A + gamma_Y + gamma_C + eps_S0)
 #     S_A = exp(-haz_A)   : survival for immatures/adults
 #     S_Y = exp(-haz_Y)   : survival for yearlings
-#     S_C = exp(-haz_C)   :survival for newborns, ~ 6mo to ~ 1.5 yrs (yearling) 
+#     S_C = exp(-haz_C)   : survival for newborns, ~ 6mo to ~ 1.5 yrs (yearling) 
 #     S_N = exp(-haz_C/2) ; #(fractional mortality for newborns March to Sept) 
 # - age0 log hazards include stochastic hierarchical random effect (eps_S0),
 #    where eps0 ~ normal(0,1) and eps_S0 = eps0 * sig_S0
@@ -69,7 +72,7 @@ nd[1] = nd[1] + n[11] * Sa * (1-Sn)
 #       and eps_SA = eps1 * sig_SA (separate variance term)
 # - preg rate Pr = inv.logit(Beta0 - Beta1*N_t/1000 + eps_P), 
 #    where epsP ~ normal(0,1) and eps_P = epsP * sig_P
-# - add density-depend. term to preg AND haz_Y? other covariates for pregnancy/survival? 
+# - add density-depend. term to both preg AND haz_Y? other covariates? 
 #  
 
 

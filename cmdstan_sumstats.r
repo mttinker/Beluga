@@ -30,12 +30,14 @@
 #   )
 # )
 # source("cmdstan_sumstats.r")
+#
+# NOTE: if errors, can retrieve with tmp = fit$output(); tmp[[1]][40:60]
 # ------------------------------------------------------
 #
 sumstats = as.data.frame(fit$summary(variables = parms))
 row.names(sumstats) = sumstats$variable; sumstats = sumstats[,-1] 
 tmp = as.data.frame(fit$summary(variables = parms, mcse = mcse_mean, 
-                                ~quantile(.x, probs = c(0.025, 0.975))))
+                                ~quantile(.x, probs = c(0.025, 0.975),na.rm=T)))
 sumstats$mcse = tmp$mcse 
 sumstats$q2.5 = tmp$`2.5%` 
 sumstats$q97.5 = tmp$`97.5%`
