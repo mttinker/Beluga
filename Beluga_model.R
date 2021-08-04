@@ -248,6 +248,23 @@ ggplot(df_Pplt[which(Years>1989),],aes(x=Year,y=Ppred)) +
   ggtitle("Beluga adult pregnancy rate, model projections (1990-2012)") +
   theme_classic()
 
+PJpred = sumstats[which(startsWith(vns,"ppnJ[")),1]
+PJpred_lo = sumstats[which(startsWith(vns,"ppnJ[")),4]
+PJpred_hi = sumstats[which(startsWith(vns,"ppnJ[")),8]
+df_PJplt = data.frame(Year=Years,PJpred=PJpred,
+                      PJpred_lo=PJpred_lo,PJpred_hi=PJpred_hi)
+df_PJplt$PJ_obs = rep(NA,Nyrs); 
+df_PJplt$PJ_obs[YrSv] = PJ
+
+ggplot(df_PJplt[which(Years>1982),],aes(x=Year,y=PJpred)) +
+  geom_ribbon(aes(ymin=PJpred_lo,ymax=PJpred_hi),alpha=0.3) +
+  geom_line() +
+  geom_point(aes(y=PJ_obs)) +
+  # geom_errorbar(aes(ymin=Survey_est-Survey_est_SE,ymax=Survey_est+Survey_est_SE)) +
+  labs(x="Year",y="Estimated proportion juvenile") +
+  ggtitle("Beluga survey age structure (1983-2020)") +
+  theme_classic()
+
 fit$save_object(file = paste0("results/beluga_rslt_",Sys.Date(),"_fit.RDS"))
 # fit = readRDS(paste0(filename))
 
