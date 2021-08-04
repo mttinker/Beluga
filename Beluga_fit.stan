@@ -47,7 +47,7 @@ data {
   real<lower=0,upper=1> PJ[Nsrv];// Proportion juveniles in surveys
   int<lower=0> StrNB[Nstr] ;     // Stranding counts of newborns
   int<lower=0> StrOA[Nstr] ;     // Stranding counts of older animals
-  //int<lower=0> Agects[Nstr,NAge];// matrix of adult counts by age (cols) & year (rows)
+  int<lower=0> AgeC[Nstr,NAge-1];// stranding counts by age (cols) & year (rows)
   simplex[NStg] ssd ;            // Initial stage distribution
   vector<lower=0>[NyrsH] Harv ;  // Harvest totals by year
   real upsilon ;                 // precision param for ppn juveniles
@@ -55,9 +55,9 @@ data {
 // Section 2. The parameters to be estimated 
 parameters {
   real<lower=0> logNinit ;        // initial log abundance
-  real<lower=0,upper=2> gamma_A  ;// log hazard ratio, adults vs baseline (4% Mort.)
+  real<lower=0,upper=2> gamma_A ; // log hazard ratio, adults vs baseline (3% Mort.)
   real<lower=0,upper=2> gamma_Y ; // log hazard ratio, yearlings vs adults
-  real<lower=0,upper=2> gamma_N ; // log hazard ratio, newborns vs yearlings
+  real<lower=0,upper=3> gamma_N ; // log hazard ratio, newborns vs yearlings
   real alpha ;                    // logit param for pregancy rate
   real<lower=0,upper=3> phi ;     // density dependent param
   real<lower=0,upper=3> sig_P ;   // stochasticity in pregancy rates (logit)
@@ -69,12 +69,12 @@ parameters {
   vector[NyrsH] gamma_H ;         // annual harvest log hazards during early years  
   real<lower=0,upper=.5> PD_NB ;  // Probability detect newborn carcass
   real<lower=0,upper=.5> PD_OA ;  // Probability detect older animal carcass
-  //real<lower=0> tau ;            // precision param for dirichlet-multinomial age dist  
-  //simplex[NAge] pie[Nstr];       // probs of stranding by age (for multinomial)
+  real<lower=0,upper=25> tau ;    // precision param for dirichlet-multinomial age dist  
+  simplex[NAge-1] pie[Nstr];      // probs of stranding by age (for multinomial)
 } 
 // Section 3. Additional transformed parameters, including key model dynamics
 transformed parameters {
-  real gammA = gamma_A - 3.2;          // adult log hazards 
+  real gammA = gamma_A - 3.5;          // adult log hazards 
   real haz_A = exp(gammA) ;            // adult hazards (natural)
   real haz_Y = exp(gammA + gamma_Y) ;  // yearling hazards (natural)
   real S_A = exp(-haz_A) ;             // adult survival rate
@@ -88,13 +88,13 @@ transformed parameters {
   vector[Nyrs] ppnJ ;                  // expected proportion of pop. <2 yrs
   vector[Nyrs] nd_NB ;                 // expected number NB carcasses detected
   vector[Nyrs] nd_OA ;                 // expected number older carcasses detected
-  vector[NyrsH] Harv_expect ;
-  //simplex[NAge] Agvc[Nyrs] ;         // predicted carcass age dist, all years
+  vector[NyrsH] Harv_expect ;          // expected harvest numbers
+  vector[NAge-1] Agvc[Nyrs] ;          // expected carcass age dist, all years
   // Year 1
   N[1] = exp(8.5+logNinit) ;
   n[1] = N[1] * ssd ;
   Harv_expect[1] = Harv[1] ;
-  Pr[1] = inv_logit(2.5 + alpha + eps_P[1]) ;
+  Pr[1] = inv_logit(1.4 + alpha + eps_P[1]) ;
   S_N[1] = exp(-exp(gammA + gamma_Y + gamma_N + phi * (N[1]/10000) + eps_N[1]));
   ppnJ[1:NyrsH] = rep_vector(0,NyrsH) ;
   // Loop through early years with harvest
@@ -107,7 +107,7 @@ transformed parameters {
     vector[NAge] nd ;
     matrix[NStg,NStg] M;
     matrix[NAge,NAge] D;
-    Pr[t] = inv_logit(2.5 + alpha + eps_P[t]) ;
+    Pr[t] = inv_logit(1.4 + alpha + eps_P[t]) ;
     haz_H = exp(gamma_H[t]) ;
     S_Yh = exp(-1 * (haz_Y + haz_H) ) ;
     S_Ah = exp(-1 * (haz_A + haz_H) ) ;
@@ -130,7 +130,7 @@ transformed parameters {
     vector[NAge] nd ;
     matrix[NStg,NStg] M;
     matrix[NAge,NAge] D;
-    Pr[t] = inv_logit(2.5 + alpha + eps_P[t]) ;
+    Pr[t] = inv_logit(1.4 + alpha + eps_P[t]) ;
     haz_N = exp(gammA + gamma_Y + gamma_N + phi * (N[t-1]/10000) + eps_N[t]) ;
     S_N[t] = exp(-haz_N) ;
     M = makemat(NStg,Pr[t],sqrt(S_N[t]),S_N[t],S_Y,S_A) ;
@@ -144,7 +144,7 @@ transformed parameters {
     nd[1] = nd[1] + n[t-1][11] * S_A * (1-sqrt(S_N[t])) ;
     nd_NB[t] = nd[1]+.001 ;
     nd_OA[t] = sum(nd[2:NAge])+.001 ;
-    //Agvc[t] = (nd + .00000001) / (sum(nd) + NAge * .00000001 ) ; 
+    Agvc[t] = (nd[2:NAge] + .00000001) / (sum(nd[2:NAge]) + (NAge-1) * .00000001 ) ; 
   }
 }
 // Section 4. Estimating model parameters (drawing from probability distributions)
@@ -162,11 +162,11 @@ model {
   StrOA ~ poisson( PD_OA * nd_OA[YrSt]) ;     
   // -Age vectors of stranded animals
   //  (need to add this once stranding age data available)
-  //for(i in 1:Nstr){
+  for(i in 1:Nstr){
     // NOTE: Use dirichlet-multinomial to handle error/variance in age counts? 
-  //  pie[i] ~ dirichlet(10 * tau * Agvc[YrSt[i]]);
-  //  Agects[i,] ~ multinomial(pie[i]) ;
-  //}
+    pie[i] ~ dirichlet(tau * Agvc[YrSt[i]]);
+    AgeC[i,] ~ multinomial(pie[i]) ;
+  }
   //
   // B) Prior distributions for model parameters:
   // Hierarchical random effects:  
@@ -175,9 +175,9 @@ model {
   gamma_H ~ normal(gamma_H_mn-5,sig_H) ;
   // Base parameter priors:
   gamma_H_mn ~ normal(0,1) ;
-  sig_H ~ normal(0,2.5) ;
-  sig_P ~ normal(0,1.5) ;
-  sig_N ~ normal(0,1.5) ;
+  sig_H ~ cauchy(0,1) ;
+  sig_P ~ cauchy(0,1) ;
+  sig_N ~ cauchy(0,1) ;
   logNinit ~ normal(0,1) ;
   gamma_A ~ normal(0,1) ;
   gamma_Y ~ normal(0,1) ;
@@ -186,7 +186,7 @@ model {
   phi ~ normal(0,1) ;
   PD_NB ~ beta(1,5) ;
   PD_OA ~ beta(1,5) ;
-  // tau ~ cauchy(0,2.5) ;
+  tau ~ cauchy(0,1) ;
 }
 // Section 5. Derived parameters and statistics 
 generated quantities {

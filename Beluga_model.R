@@ -20,27 +20,46 @@ initvec = read_excel("data/Beluga_data.xlsx",sheet = 1)
 Harvest = read_excel("data/Beluga_data.xlsx",sheet = 2)
 Hv_ages = read_excel("data/Beluga_data.xlsx",sheet = 3)
 df_Surv = read_excel("data/Beluga_data.xlsx",sheet = 4)
-df_Strd = read_excel("data/Beluga_data.xlsx",sheet = 5)
-
+#df_Strd = read_excel("data/Beluga_data.xlsx",sheet = 5)
+df_Strd = read_excel("data/Strandings1983-2020_20210802.xlsx")
 # Process data -------------------------------------------
 Year1 = min(Harvest$Year) ; 
-YearT = max(df_Strd$Year) ;
+YearT = max(df_Strd$YYYY) ;
 Years = seq(Year1,YearT)  ;
 YearsN = Years - Year1 + 1
 Nyrs = max(YearsN) ;
 NyrsH = max(Harvest$Year) - Year1 + 1
-NStg = 12; NAge = 9
+NStg = 12; NAge = 9 # (newborns + 8 year-classes)
 YrSv = df_Surv$Year - Year1 + 1
 Nsrv = length(YrSv)
 ObsS = df_Surv$`Pop size estimate`
 VarS = (df_Surv$SE)^2
 invSc = ObsS / VarS
 PJ = df_Surv$Prop_juv
-YrSt = df_Strd$Year - Year1 + 1
-Nstr = length(YrSt)
-StrNB = df_Strd$NB_shift
-StrOA = df_Strd$Older_shift
 Harv = pmax(0.01,Harvest$Removals)
+# Process stranding data: group counts by survey year (Oct - Sept)
+#  and make matrix of age at death vectors for 1+ ages
+Year1str = min(df_Strd$YYYY)
+StrNB = numeric()
+StrOA = numeric()
+YrSt = numeric()
+Agects = matrix(0,nrow = YearT - Year1str + 1, ncol = 8)
+t = 0
+for(y in Year1str:YearT){
+  t = t+1
+  yr = y - Year1 + 1
+  YrSt[t] = yr
+  ii = which( (df_Strd$YYYY==y & df_Strd$MM<10 & df_Strd$Best_GLG==0) | 
+                (df_Strd$YYYY==(y-1) & df_Strd$MM>9 & df_Strd$Best_GLG==0))
+  StrNB[t] = length(ii)
+  ii = which( (df_Strd$YYYY==y & df_Strd$MM<10 & ( is.na(df_Strd$Best_GLG) | df_Strd$Best_GLG>0)  ) | 
+              (df_Strd$YYYY==(y-1) & df_Strd$MM>9 & ( is.na(df_Strd$Best_GLG) | df_Strd$Best_GLG>0)))
+  StrOA[t] = length(ii)
+  ii = ii[which(df_Strd$Best_GLG[ii]>0)]
+  iii = pmin(8,df_Strd$Best_GLG[ii])
+  for(i in 1:length(iii)){ Agects[t,iii[i]] = Agects[t,iii[i]] + 1 }
+}
+Nstr = length(YrSt)
 #
 # Determine appropriate precision param for Beta dist, proportion Juveniles
 # (assuming binomial distrib. of raw counts of Juvs vs all animals)
@@ -52,52 +71,56 @@ Harv = pmax(0.01,Harvest$Removals)
 # rm(P_rnd,coefs,N,P,J,N_ob,N_jv)
 upsilon = 245
 #
-# *** STILL NEED TO ADD AGE DIST OF STRANDED ANIMALS ***
-#
 # Initialize Beluga matrix with 12 stages, 9 age classes: 
 #  stages 1:8 = ages 0-7 (both sexes), stage 9 = 8+ males, 
 #  stages 10 = 8+ fems "available", 11 = 8+ fems preg, 12 = 8+ fems w. calves
 #    (Priors for vital rates based on estimates from Mosnier 2014)
-Sn = .72     # newborn calf survival (from 0.5 yr old to 1.5 yr old at next survey)
+Sn = .7     # newborn calf survival (from 0.5 yr old to 1.5 yr old at next survey)
 Snn = sqrt(Sn) # neonate survival (birth to time of survey, Sept 1)
 Sy = .9   # yearling survival (1.5 to 2.5 year old)
 Sa = .95   # adult survival (annual survival for 2yr old and older)
-Pr = .82    # pregnancy rate (for "available" females)
+Pr = .4    # pregnancy rate (for "available" females)
 source("Make_matrix.R")
 M = Make_matrix(Snn,Sn,Sy,Sa,Pr)
 lambda = eigen(M); lambda = lambda$values[1]
 ssd=abs(eigen(M)$vectors[,1]); ssd = ssd/sum(ssd)  # stable stage distribution 
+nt = ssd*1000; Nt = sum(nt)
+for(t in 1:100){
+  nt = M %*% nt
+  Nt = c(Nt,sum(nt))
+}
+plot(Nt)
 #
 stan.data <- list(Nyrs=Nyrs,NyrsH=NyrsH,NStg=NStg,NAge=NAge,
-                  Nsrv=Nsrv,Nstr=Nstr,YrSv=YrSv,YrSt=YrSt,
+                  Nsrv=Nsrv,Nstr=Nstr,YrSv=YrSv,YrSt=YrSt,AgeC=Agects,
                   ObsS=ObsS,invSc=invSc,PJ=PJ,StrNB=StrNB,StrOA=StrOA,
                   ssd=ssd,Harv=Harv,upsilon=upsilon) # 
-parms <- c("ppp","Tstat","Tstat_new","sig_N","sig_P","sig_H","alpha","phi",
+parms <- c("ppp","Tstat","Tstat_new","sig_N","sig_P","sig_H","tau","alpha","phi",
            "Pr_mn","S_A","S_Y","S_N_mn","gamma_A","gamma_Y","gamma_N","gamma_H_mn",
-           "PD_NB","PD_OA","N","Pr","S_N","ynew") # 
+           "PD_NB","PD_OA","N","Pr","S_N","ppnJ","ynew") # 
 #
-init_fun <- function() {list(sig_N=runif(1, 1.45, 1.55),
-                             sig_P=runif(1, 1, 2),
-                             sig_H=runif(1, 2.8, 3),
-                             logNinit=runif(1, .55, .65),
-                             gammA=runif(1, .275, .325),
-                             gamma_Y=runif(1, .35, .45),
-                             gamma_N=runif(1, .45, .55),
-                             alpha=runif(1, -1, 1),
-                             phi=runif(1, .65, .75),
-                             PD_NB=runif(1, .05, .07),
-                             PD_OA=runif(1, .2, .21),
-                             gamma_H_mn=runif(1, .15, .25)
-)}   
+# init_fun <- function() {list(sig_N=runif(1, 1.45, 1.55),
+#                              sig_P=runif(1, 1, 2),
+#                              sig_H=runif(1, 2.8, 3),
+#                              logNinit=runif(1, .55, .65),
+#                              gammA=runif(1, .275, .325),
+#                              gamma_Y=runif(1, .35, .45),
+#                              gamma_N=runif(1, .45, .55),
+#                              alpha=runif(1, -1, 1),
+#                              phi=runif(1, .65, .75),
+#                              PD_NB=runif(1, .05, .07),
+#                              PD_OA=runif(1, .2, .21),
+#                              gamma_H_mn=runif(1, .15, .25)
+# )}   
 #
 # Fit model ---------------------------------------------
 nburnin = 500                    # number warm-up (burn-in) samples
 nsamples = 5000                 # desired total number samples
 fitmodel = c("Beluga_fit.stan")    # name of file with stan code
-mod <- cmdstan_model(fitmodel)   # compiles model (if necessary)
 cores = detectCores()
 ncore = min(20,cores-4)
 Niter = round(nsamples/ncore)
+mod <- cmdstan_model(fitmodel)   # compiles model (if necessary)
 suppressMessages(                # Suppress messages/warnings (if desired)
   suppressWarnings (
     fit <- mod$sample(
@@ -148,6 +171,13 @@ mcmc_areas(fit$draws(variables = c("sig_P","sig_N","sig_H")),
            area_method="equal height",
            prob = 0.8) + 
   ggtitle("Parameter posterior distributions, variance params") +
+  labs(x="Parameter value",y="Posterior sample density") +
+  theme_classic()
+
+mcmc_areas(fit$draws(variables = c("tau")),
+           area_method="equal height",
+           prob = 0.8) + 
+  ggtitle("Posterior distributions, precision param for age distribution") +
   labs(x="Parameter value",y="Posterior sample density") +
   theme_classic()
 
