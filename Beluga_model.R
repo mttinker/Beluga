@@ -253,14 +253,16 @@ PJpred_lo = sumstats[which(startsWith(vns,"ppnJ[")),4]
 PJpred_hi = sumstats[which(startsWith(vns,"ppnJ[")),8]
 df_PJplt = data.frame(Year=Years,PJpred=PJpred,
                       PJpred_lo=PJpred_lo,PJpred_hi=PJpred_hi)
-df_PJplt$PJ_obs = rep(NA,Nyrs); 
+df_PJplt$PJ_obs = rep(NA,Nyrs); df_PJplt$PJ_obs_se = rep(NA,Nyrs)
 df_PJplt$PJ_obs[YrSv] = PJ
-
+N_ob = round(df_Surv$`Pop size estimate`/(2.021*2.09))
+N_jv = PJ*N_ob ; se = sqrt(N_ob*PJ*(1-PJ)); CV = se/N_jv
+df_PJplt$PJ_obs_se[YrSv] = CV*PJ
 ggplot(df_PJplt[which(Years>1982),],aes(x=Year,y=PJpred)) +
   geom_ribbon(aes(ymin=PJpred_lo,ymax=PJpred_hi),alpha=0.3) +
   geom_line() +
   geom_point(aes(y=PJ_obs)) +
-  # geom_errorbar(aes(ymin=Survey_est-Survey_est_SE,ymax=Survey_est+Survey_est_SE)) +
+  geom_errorbar(aes(ymin=PJ_obs-1.96*PJ_obs_se,ymax=PJ_obs+1.96*PJ_obs_se)) +
   labs(x="Year",y="Estimated proportion juvenile") +
   ggtitle("Beluga survey age structure (1983-2020)") +
   theme_classic()
