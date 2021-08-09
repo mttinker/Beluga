@@ -39,27 +39,7 @@ PJ = df_Surv$Prop_juv
 Harv = pmax(0.01,Harvest$Removals)
 # Process stranding data: group counts by survey year (Oct - Sept)
 #  and make matrix of age at death vectors for 1+ ages
-Year1str = min(df_Strd$YYYY)
-StrNB = numeric()
-StrOA = numeric()
-YrSt = numeric()
-Agects = matrix(0,nrow = YearT - Year1str + 1, ncol = 8)
-t = 0
-for(y in Year1str:YearT){
-  t = t+1
-  yr = y - Year1 + 1
-  YrSt[t] = yr
-  ii = which( (df_Strd$YYYY==y & df_Strd$MM<10 & df_Strd$Best_GLG==0) | 
-                (df_Strd$YYYY==(y-1) & df_Strd$MM>9 & df_Strd$Best_GLG==0))
-  StrNB[t] = length(ii)
-  ii = which( (df_Strd$YYYY==y & df_Strd$MM<10 & ( is.na(df_Strd$Best_GLG) | df_Strd$Best_GLG>0)  ) | 
-              (df_Strd$YYYY==(y-1) & df_Strd$MM>9 & ( is.na(df_Strd$Best_GLG) | df_Strd$Best_GLG>0)))
-  StrOA[t] = length(ii)
-  ii = ii[which(df_Strd$Best_GLG[ii]>0)]
-  iii = pmin(8,df_Strd$Best_GLG[ii])
-  for(i in 1:length(iii)){ Agects[t,iii[i]] = Agects[t,iii[i]] + 1 }
-}
-Nstr = length(YrSt)
+source("Stranding_Age_process.R")
 #
 # Determine appropriate precision param for Beta dist, proportion Juveniles
 # (assuming binomial distrib. of raw counts of Juvs vs all animals)
@@ -77,11 +57,12 @@ upsilon = 245
 #    (Priors for vital rates based on estimates from Mosnier 2014)
 Sn = .7     # newborn calf survival (from 0.5 yr old to 1.5 yr old at next survey)
 Snn = sqrt(Sn) # neonate survival (birth to time of survey, Sept 1)
-Sy = .9   # yearling survival (1.5 to 2.5 year old)
+Sy = .85   # yearling survival (1.5 to 2.5 year old)
+Sc = Snn * sqrt(Sy)
 Sa = .95   # adult survival (annual survival for 2yr old and older)
-Pr = .4    # pregnancy rate (for "available" females)
+Pr = .5    # pregnancy rate (for "available" females)
 source("Make_matrix.R")
-M = Make_matrix(Snn,Sn,Sy,Sa,Pr)
+M = Make_matrix(Snn,Sc,Sy,Sa,Pr)
 lambda = eigen(M); lambda = lambda$values[1]
 ssd=abs(eigen(M)$vectors[,1]); ssd = ssd/sum(ssd)  # stable stage distribution 
 nt = ssd*1000; Nt = sum(nt)
@@ -89,15 +70,16 @@ for(t in 1:100){
   nt = M %*% nt
   Nt = c(Nt,sum(nt))
 }
-plot(Nt)
+# plot(Nt)
 #
 stan.data <- list(Nyrs=Nyrs,NyrsH=NyrsH,NStg=NStg,NAge=NAge,
                   Nsrv=Nsrv,Nstr=Nstr,YrSv=YrSv,YrSt=YrSt,AgeC=Agects,
                   ObsS=ObsS,invSc=invSc,PJ=PJ,StrNB=StrNB,StrOA=StrOA,
                   ssd=ssd,Harv=Harv,upsilon=upsilon) # 
-parms <- c("ppp","Tstat","Tstat_new","sig_N","sig_P","sig_H","tau","alpha","phi",
-           "Pr_mn","S_A","S_Y","S_N_mn","gamma_A","gamma_Y","gamma_N","gamma_H_mn",
-           "PD_NB","PD_OA","N","Pr","S_N","ppnJ","ynew") # 
+parms <- c("ppp","Tstat","Tstat_new","sig_N","sig_P","sig_H","tau","PD_NB",
+           "PD_OA","S_A","S_Y","S_C_mn","S_N_mn","Pr_mn","alpha","phi",
+           "gamma_A","gamma_Y","gamma_N","gamma_H_mn","Pr","S_N",
+           "N","ppn_J","ppn_Av","ppn_Pr","ppn_Wc","ynew") # 
 #
 # init_fun <- function() {list(sig_N=runif(1, 1.45, 1.55),
 #                              sig_P=runif(1, 1, 2),
@@ -141,10 +123,10 @@ suppressMessages(                # Suppress messages/warnings (if desired)
 source("cmdstan_sumstats.r")
 #
 # Diagnostic Plots -------------------------------------
-
-mcmc_trace(fit$draws("sig_N"))
+#
+mcmc_trace(fit$draws("tau"))
 mcmc_trace(fit$draws("gamma_A"))
-
+#
 set.seed(123)
 rr = sample(Nsims,1000)
 y = ObsS ;
@@ -152,7 +134,7 @@ y_rep <- (as.matrix(mcmc[,which(startsWith(vn,"ynew["))]))
 ppc_dens_overlay(y, y_rep[rr[1:100],]) + 
   ggtitle ("Posterior predictive distribution, observed vs out-of-sample predictions") +
   labs(x = "Survey Counts",y = "Frequency") + theme_classic()
-
+#
 Bayes_P = sumstats[which(vns=="ppp"),1]
 if(Bayes_P>0.75){Bayes_P=1-Bayes_P}
 xx = as.matrix(mcmc[,vns=="Tstat"][rr])
@@ -166,37 +148,37 @@ ggplot(df_ppc,aes(x=x,y=y)) +
        subtitle = paste0("Bayesian-P = ",Bayes_P)) +
   geom_abline(slope=1,intercept=0) +
   theme_classic()
-
+#
 mcmc_areas(fit$draws(variables = c("sig_P","sig_N","sig_H")),
            area_method="equal height",
            prob = 0.8) + 
   ggtitle("Parameter posterior distributions, variance params") +
   labs(x="Parameter value",y="Posterior sample density") +
   theme_classic()
-
+#
 mcmc_areas(fit$draws(variables = c("tau")),
            area_method="equal height",
            prob = 0.8) + 
   ggtitle("Posterior distributions, precision param for age distribution") +
   labs(x="Parameter value",y="Posterior sample density") +
   theme_classic()
-
+#
 mcmc_areas(fit$draws(variables = c("gamma_A","gamma_Y","gamma_N")),
            area_method="equal height",
            prob = 0.8) + 
   ggtitle("Parameter posterior distributions, log hazard params") +
   labs(x="Parameter value",y="Posterior sample density") +
   theme_classic()
-
-mcmc_areas(fit$draws(variables = c("S_A","S_Y","S_N_mn","Pr_mn")),
+#
+mcmc_areas(fit$draws(variables = c("S_A","S_Y","S_C_mn","S_N_mn","Pr_mn")),
            area_method="equal height",
            prob = 0.8) + 
   ggtitle("Parameter posterior distributions, vital rates") +
   scale_y_discrete(labels=c("Survival, adult","Survival, yearling",
-                            "Survival, newborn","Pregnancy rate")) +
+                            "Survival, calf", "Survival, newborn (6 mo)", "Pregnancy rate")) +
   labs(x="Parameter value",y="Posterior sample density") +
   theme_classic()
-
+#
 mcmc_areas(fit$draws(variables = c("PD_NB","PD_OA")),
            area_method="equal height",
            prob = 0.8) + 
@@ -204,7 +186,7 @@ mcmc_areas(fit$draws(variables = c("PD_NB","PD_OA")),
   ggtitle("Parameter posterior distributions, carcass detection probabilities") +
   labs(x="Parameter value",y="Posterior sample density") +
   theme_classic()
-
+#
 Npred = sumstats[which(startsWith(vns,"N[")),1]
 Npred_lo = sumstats[which(startsWith(vns,"N[")),4]
 Npred_hi = sumstats[which(startsWith(vns,"N[")),8]
@@ -212,7 +194,7 @@ df_Nplt = data.frame(Year=Years,Npred=Npred,
                        Npred_lo=Npred_lo,Npred_hi=Npred_hi)
 df_Nplt$Survey_est = rep(NA,Nyrs); df_Nplt$Survey_est_SE = rep(NA,Nyrs)
 df_Nplt$Survey_est[YrSv] = ObsS; df_Nplt$Survey_est_SE[YrSv] = sqrt(VarS)
-
+#
 ggplot(df_Nplt[which(Years>1925),],aes(x=Year,y=Npred)) +
   geom_ribbon(aes(ymin=Npred_lo,ymax=Npred_hi),alpha=0.3) +
   geom_line() +
@@ -221,36 +203,76 @@ ggplot(df_Nplt[which(Years>1925),],aes(x=Year,y=Npred)) +
   labs(x="Year",y="Estimated Abundance") +
   ggtitle("Beluga population abundance, model projections (1925-2012)") +
   theme_classic()
-
+#
 Spred = sumstats[which(startsWith(vns,"S_N[")),1]
 Spred_lo = sumstats[which(startsWith(vns,"S_N[")),5]
 Spred_hi = sumstats[which(startsWith(vns,"S_N[")),7]
 df_Splt = data.frame(Year=Years,Spred=Spred,
                      Spred_lo=Spred_lo,Spred_hi=Spred_hi)
-
+#
 ggplot(df_Splt[which(Years>1989),],aes(x=Year,y=Spred)) +
   geom_ribbon(aes(ymin=Spred_lo,ymax=Spred_hi),alpha=0.3) +
   geom_line() +
-  labs(x="Year",y="Estimated surviva rate, newborns") +
+  labs(x="Year",y="Estimated survival rate, newborns") +
   ggtitle("Beluga newborn survival rate, model projections (1990-2012)") +
   theme_classic()
-
+#
 Ppred = sumstats[which(startsWith(vns,"Pr[")),1]
 Ppred_lo = sumstats[which(startsWith(vns,"Pr[")),5]
 Ppred_hi = sumstats[which(startsWith(vns,"Pr[")),7]
 df_Pplt = data.frame(Year=Years,Ppred=Ppred,
                      Ppred_lo=Ppred_lo,Ppred_hi=Ppred_hi)
-
+#
 ggplot(df_Pplt[which(Years>1989),],aes(x=Year,y=Ppred)) +
   geom_ribbon(aes(ymin=Ppred_lo,ymax=Ppred_hi),alpha=0.3) +
   geom_line() +
   labs(x="Year",y="Estimated pregancy rate") +
   ggtitle("Beluga adult pregnancy rate, model projections (1990-2012)") +
   theme_classic()
-
-PJpred = sumstats[which(startsWith(vns,"ppnJ[")),1]
-PJpred_lo = sumstats[which(startsWith(vns,"ppnJ[")),4]
-PJpred_hi = sumstats[which(startsWith(vns,"ppnJ[")),8]
+#
+P_Av_pred = sumstats[which(startsWith(vns,"ppn_Av[")),1]
+P_Av_pred_lo = sumstats[which(startsWith(vns,"ppn_Av[")),5]
+P_Av_pred_hi = sumstats[which(startsWith(vns,"ppn_Av[")),7]
+P_Pr_pred = sumstats[which(startsWith(vns,"ppn_Pr[")),1]
+P_Pr_pred_lo = sumstats[which(startsWith(vns,"ppn_Pr[")),5]
+P_Pr_pred_hi = sumstats[which(startsWith(vns,"ppn_Pr[")),7]
+P_Wc_pred = sumstats[which(startsWith(vns,"ppn_Wc[")),1]
+P_Wc_pred_lo = sumstats[which(startsWith(vns,"ppn_Wc[")),5]
+P_Wc_pred_hi = sumstats[which(startsWith(vns,"ppn_Wc[")),7]
+df_Femstg_plt = data.frame(Year=Years,Status=rep("Available",Nyrs),Prop=P_Av_pred,
+                                               Prop_lo=P_Av_pred_lo,Prop_hi=P_Av_pred_hi)
+df_Femstg_plt = rbind(df_Femstg_plt,data.frame(Year=Years,Status=rep("Pregnant",Nyrs),
+                                               Prop=P_Pr_pred,
+                                               Prop_lo=P_Pr_pred_lo,Prop_hi=P_Pr_pred_hi) )
+df_Femstg_plt = rbind(df_Femstg_plt,data.frame(Year=Years,Status=rep("With_calf",Nyrs),
+                                               Prop=P_Wc_pred,
+                                               Prop_lo=P_Wc_pred_lo,Prop_hi=P_Wc_pred_hi) )                      
+#
+plt_pAv = ggplot(df_Femstg_plt[which(df_Femstg_plt$Year>1982 & df_Femstg_plt$Status=="Available" ),],
+                 aes(x=Year,y=Prop)) +  # group=Status,color=Status,fill=Status
+  geom_ribbon(aes(ymin=Prop_lo,ymax=Prop_hi),alpha=0.3) +
+  geom_line() +
+  labs(x="Year",y="Estimated proportion females") +
+  ggtitle("Beluga female status (1983-2020): Proportion Available") +
+  theme_classic()
+plt_pPr = ggplot(df_Femstg_plt[which(df_Femstg_plt$Year>1982 & df_Femstg_plt$Status=="Pregnant" ),],
+                 aes(x=Year,y=Prop)) +  # group=Status,color=Status,fill=Status
+  geom_ribbon(aes(ymin=Prop_lo,ymax=Prop_hi),alpha=0.3) +
+  geom_line() +
+  labs(x="Year",y="Estimated proportion females") +
+  ggtitle("Beluga female status (1983-2020): Proportion Pregnant") +
+  theme_classic()
+plt_pWc = ggplot(df_Femstg_plt[which(df_Femstg_plt$Year>1982 & df_Femstg_plt$Status=="With_calf" ),],
+                 aes(x=Year,y=Prop)) +  # group=Status,color=Status,fill=Status
+  geom_ribbon(aes(ymin=Prop_lo,ymax=Prop_hi),alpha=0.3) +
+  geom_line() +
+  labs(x="Year",y="Estimated proportion females") +
+  ggtitle("Beluga female status (1983-2020): Proportion With calf") +
+  theme_classic()
+#
+PJpred = sumstats[which(startsWith(vns,"ppn_J[")),1]
+PJpred_lo = sumstats[which(startsWith(vns,"ppn_J[")),4]
+PJpred_hi = sumstats[which(startsWith(vns,"ppn_J[")),8]
 df_PJplt = data.frame(Year=Years,PJpred=PJpred,
                       PJpred_lo=PJpred_lo,PJpred_hi=PJpred_hi)
 df_PJplt$PJ_obs = rep(NA,Nyrs); df_PJplt$PJ_obs_se = rep(NA,Nyrs)
@@ -258,7 +280,7 @@ df_PJplt$PJ_obs[YrSv] = PJ
 N_ob = round(df_Surv$`Pop size estimate`/(2.021*2.09))
 N_jv = PJ*N_ob ; se = sqrt(N_ob*PJ*(1-PJ)); CV = se/N_jv
 df_PJplt$PJ_obs_se[YrSv] = CV*PJ
-ggplot(df_PJplt[which(Years>1982),],aes(x=Year,y=PJpred)) +
+plt_pJv = ggplot(df_PJplt[which(Years>1982),],aes(x=Year,y=PJpred)) +
   geom_ribbon(aes(ymin=PJpred_lo,ymax=PJpred_hi),alpha=0.3) +
   geom_line() +
   geom_point(aes(y=PJ_obs)) +
@@ -266,7 +288,11 @@ ggplot(df_PJplt[which(Years>1982),],aes(x=Year,y=PJpred)) +
   labs(x="Year",y="Estimated proportion juvenile") +
   ggtitle("Beluga survey age structure (1983-2020)") +
   theme_classic()
-
+#
+grid.arrange(grobs=list(plt_pAv,plt_pPr,plt_pWc,plt_pJv),nrow=4)
+#
+source("Compare_priors.R")
+# Save Results -----------------------------------------------------------
 fit$save_object(file = paste0("results/beluga_rslt_",Sys.Date(),"_fit.RDS"))
 # fit = readRDS(paste0(filename))
 

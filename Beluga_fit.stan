@@ -4,11 +4,12 @@
 //
 functions {
   // user function to create demographic transition projection matrix
-  matrix makemat(int NSt, real Pr, real Snn, real Sn, real Sy, real Sa) {
-    // Note: Snn = survival of neonatal calves from birth to Sept survey
+  matrix makemat(int NSt, real Pr, real Sn, real Sc, real Sy, real Sa) {
+    // Note: Sn = survival of neonatal calves from birth to Sept survey
+    //       Sc = survival of calves from Sept survey to following Sept survey
     matrix[NSt,NSt] M = rep_matrix(0,NSt,NSt) ;
-    M[1,11] = Sa * Snn ;
-    M[2,1] = Sn ;
+    M[1,11] = Sa * Sn ;
+    M[2,1] = Sc ;
     M[3,2] = Sy ;
     M[4:8,3:7] = add_diag(M[4:8,3:7], rep_vector(Sa,5)) ;
     M[9,8] = Sa/2 ;    
@@ -17,16 +18,16 @@ functions {
     M[11,8] = Sa/2 * Pr ;
     M[11,10] = Sa * Pr ;
     M[10,10] = Sa * (1-Pr) ;
-    M[12,11] = Sa * Snn ;
-    M[10,11] = Sa * (1-Snn) ;
-    M[10,12] = Sa * (Sn + (1-Sn) * (1-Pr)) ;
-    M[11,12] = Sa * (1-Sn) * Pr ;
+    M[12,11] = Sa * Sn ;
+    M[10,11] = Sa * (1-Sn) ;
+    M[10,12] = Sa * (Sc + (1-Sc) * (1-Pr)) ;
+    M[11,12] = Sa * (1-Sc) * Pr ;
     return M ;
   }
   // user function to create projection matrix of deaths
-  matrix makeDmat(int Nag, real Sn, real Sy, real Sa) {
+  matrix makeDmat(int Nag, real Sc, real Sy, real Sa) {
     matrix[Nag,Nag] D = rep_matrix(0,Nag,Nag) ;
-    D[1,1] = 1-Sn ;
+    D[1,1] = 1-Sc ;
     D[2,2] = 1-Sy ;
     D[3:Nag,3:Nag] = add_diag(D[3:Nag,3:Nag], rep_vector((1-Sa),(Nag-2) )) ;
     return D ;
@@ -57,7 +58,7 @@ parameters {
   real<lower=0> logNinit ;        // initial log abundance
   real<lower=0,upper=2> gamma_A ; // log hazard ratio, adults vs baseline (3% Mort.)
   real<lower=0,upper=2> gamma_Y ; // log hazard ratio, yearlings vs adults
-  real<lower=0,upper=3> gamma_N ; // log hazard ratio, newborns vs yearlings
+  real<lower=-2,upper=2> gamma_N ;// log hazard ratio, newborns vs 50% mort 
   real alpha ;                    // logit param for pregancy rate
   real<lower=0,upper=3> phi ;     // density dependent param
   real<lower=0,upper=3> sig_P ;   // stochasticity in pregancy rates (logit)
@@ -75,17 +76,19 @@ parameters {
 // Section 3. Additional transformed parameters, including key model dynamics
 transformed parameters {
   real gammA = gamma_A - 3.5;          // adult log hazards 
+  real gammN = gamma_N - .365;         // newborn log hazards 
   real haz_A = exp(gammA) ;            // adult hazards (natural)
   real haz_Y = exp(gammA + gamma_Y) ;  // yearling hazards (natural)
   real S_A = exp(-haz_A) ;             // adult survival rate
   real S_Y = exp(-haz_Y) ;             // yearling survival rate
   vector[Nyrs] Pr ;                    // pregancy rate 
   vector[Nyrs] S_N ;                   // Newborn survival rate
+  vector[Nyrs] S_C ;                   // Calf survival rate (first year)
   vector[Nyrs] eps_P = epsP * sig_P;   // stoch. effects, Preg
   vector[Nyrs] eps_N = epsN * sig_N;   // stoch. effects, NB
   vector[NStg] n[Nyrs] ;               // abundance, by stage/year
   vector[Nyrs] N ;                     // population abundance by year
-  vector[Nyrs] ppnJ ;                  // expected proportion of pop. <2 yrs
+  vector[Nyrs] ppn_J ;                 // expected proportion of pop. <2 yrs
   vector[Nyrs] nd_NB ;                 // expected number NB carcasses detected
   vector[Nyrs] nd_OA ;                 // expected number older carcasses detected
   vector[NyrsH] Harv_expect ;          // expected harvest numbers
@@ -94,9 +97,10 @@ transformed parameters {
   N[1] = exp(8.5+logNinit) ;
   n[1] = N[1] * ssd ;
   Harv_expect[1] = Harv[1] ;
-  Pr[1] = inv_logit(1.4 + alpha + eps_P[1]) ;
-  S_N[1] = exp(-exp(gammA + gamma_Y + gamma_N + phi * (N[1]/10000) + eps_N[1]));
-  ppnJ[1:NyrsH] = rep_vector(0,NyrsH) ;
+  Pr[1] = inv_logit(alpha + eps_P[1]) ;
+  S_N[1] = sqrt(exp(-exp(gammN + phi * (N[1]/10000) + eps_N[1])) );
+  S_C[1] = S_N[1] * sqrt(S_Y) ;
+  ppn_J[1:NyrsH] = rep_vector(0,NyrsH) ;
   // Loop through early years with harvest
   for(t in 2:NyrsH){
     real haz_H ;
@@ -107,18 +111,19 @@ transformed parameters {
     vector[NAge] nd ;
     matrix[NStg,NStg] M;
     matrix[NAge,NAge] D;
-    Pr[t] = inv_logit(1.4 + alpha + eps_P[t]) ;
+    Pr[t] = inv_logit(alpha + eps_P[t]) ;
     haz_H = exp(gamma_H[t]) ;
     S_Yh = exp(-1 * (haz_Y + haz_H) ) ;
     S_Ah = exp(-1 * (haz_A + haz_H) ) ;
-    haz_N = exp(gammA + gamma_Y + gamma_N + phi * (N[t-1]/10000) + eps_N[t]) ;
-    S_N[t] = exp(-haz_N) ;
-    M = makemat(NStg,Pr[t],sqrt(S_N[t]),S_N[t],S_Yh,S_Ah) ;
+    haz_N = exp(gammN + phi * (N[t-1]/10000) + eps_N[t]) ;
+    S_N[t] = sqrt(exp(-haz_N)) ;
+    S_C[t] = S_N[t] * sqrt(S_Y) ;
+    M = makemat(NStg,Pr[t],S_N[t],S_C[t],S_Yh,S_Ah) ;
     n[t] = M * n[t-1]  ;
     N[t] = sum(n[t]) ;
     nt[1:8] = n[t-1][1:8] ;  
     nt[9] = sum(n[t-1][9:12]) ;  
-    D = makeDmat(NAge,S_N[t],S_Yh,S_Ah) ;
+    D = makeDmat(NAge,S_C[t],S_Yh,S_Ah) ;
     nd = D * nt ;
     Harv_expect[t] = (nd[2] * (haz_H/(haz_Y + haz_H))) + 
                      (sum(nd[3:9]) * (haz_H/(haz_A + haz_H))) ; 
@@ -130,18 +135,19 @@ transformed parameters {
     vector[NAge] nd ;
     matrix[NStg,NStg] M;
     matrix[NAge,NAge] D;
-    Pr[t] = inv_logit(1.4 + alpha + eps_P[t]) ;
-    haz_N = exp(gammA + gamma_Y + gamma_N + phi * (N[t-1]/10000) + eps_N[t]) ;
-    S_N[t] = exp(-haz_N) ;
-    M = makemat(NStg,Pr[t],sqrt(S_N[t]),S_N[t],S_Y,S_A) ;
+    Pr[t] = inv_logit(alpha + eps_P[t]) ;
+    haz_N = exp(gammN + phi * (N[t-1]/10000) + eps_N[t]) ;
+    S_N[t] = sqrt(exp(-haz_N)) ;
+    S_C[t] = S_N[t] * sqrt(S_Y) ;
+    M = makemat(NStg,Pr[t],S_N[t],S_C[t],S_Y,S_A) ;
     n[t] = M * n[t-1]  ;
     N[t] = sum(n[t]) ;
-    ppnJ[t] = (0.0001 + sum(n[t][1:2])) / (0.0001 +  N[t]) ;
+    ppn_J[t] = (0.0001 + sum(n[t][1:2])) / (0.0001 +  N[t]) ;
     nt[1:8] = n[t-1][1:8] ;  
     nt[9] = sum(n[t-1][9:12]) ;  
-    D = makeDmat(NAge,S_N[t],S_Y,S_A) ;
+    D = makeDmat(NAge,S_C[t],S_Y,S_A) ;
     nd = D * nt ;
-    nd[1] = nd[1] + n[t-1][11] * S_A * (1-sqrt(S_N[t])) ;
+    nd[1] = nd[1] + n[t-1][11] * S_A * (1-S_N[t]) ;
     nd_NB[t] = nd[1]+.001 ;
     nd_OA[t] = sum(nd[2:NAge])+.001 ;
     Agvc[t] = (nd[2:NAge] + .00000001) / (sum(nd[2:NAge]) + (NAge-1) * .00000001 ) ; 
@@ -155,7 +161,7 @@ model {
   // -Survey Estimates, by year. NOTE for gamma, invscale = M / V
   ObsS ~ gamma(N[YrSv] .* invSc, invSc) ; 
   // -Proportion juvs (<2yr-olds) 
-  PJ ~ beta(upsilon*ppnJ[YrSv]+.0001,upsilon*(1-ppnJ[YrSv])+.0001 ) ;
+  PJ ~ beta(upsilon*ppn_J[YrSv]+.0001,upsilon*(1-ppn_J[YrSv])+.0001 ) ;
   // -Stranding counts, newborns
   StrNB ~ poisson( PD_NB * nd_NB[YrSt]) ;     
   // -Stranding counts, older animals
@@ -182,7 +188,7 @@ model {
   gamma_A ~ normal(0,1) ;
   gamma_Y ~ normal(0,1) ;
   gamma_N ~ normal(0,1) ;
-  alpha ~ normal(0,1) ;
+  alpha ~ normal(0,1.5) ;
   phi ~ normal(0,1) ;
   PD_NB ~ beta(1,5) ;
   PD_OA ~ beta(1,5) ;
@@ -190,8 +196,12 @@ model {
 }
 // Section 5. Derived parameters and statistics 
 generated quantities {
-  real S_N_mn ;                 // mean newborn survival rate (for N ~ 1000)
+  real S_N_mn ;                 // mean newborn survival rate 
+  real S_C_mn ;                 // mean calf survival rate 
   real Pr_mn ;                  // mean pregnany rate (for available females)
+  vector[Nyrs] ppn_Av;          // proportion adult females "available"
+  vector[Nyrs] ppn_Pr;          // proportion adult females pregnant
+  vector[Nyrs] ppn_Wc;          // proportion adult females with dependent calves
   real ynew[Nsrv]  ;            // New observations (out of sample) for ppc  
   vector[Nsrv] P_resid;         // Pearson residuals, observed data
   vector[Nsrv] P_resid_new;     // Pearson residuals, new data
@@ -199,7 +209,13 @@ generated quantities {
   real Tstat_new ;              // Test statistic, new data (chi-2)
   real ppp ;                    // posterior predictive P-value 
   S_N_mn = mean(S_N) ;
-  Pr_mn =  mean(Pr);
+  S_C_mn = mean(S_C) ;
+  Pr_mn = mean(Pr);
+  for (t in 1:Nyrs){
+    ppn_Av[t] = n[t][10] / sum(n[t][10:12]) ;
+    ppn_Pr[t] = n[t][11] / sum(n[t][10:12]) ;
+    ppn_Wc[t] = n[t][12] / sum(n[t][10:12]) ;
+  } 
   for (t in 1:Nsrv) {
     // Pearson residuals (for gamma distrib. densities only)
     ynew[t] = gamma_rng(N[YrSv[t]] * invSc[t], invSc[t]) ;
