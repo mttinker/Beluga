@@ -18,7 +18,7 @@ rstan::rstan_options(javascript=FALSE)
 post_gmmaA = mcmc[,which(vn=="gamma_A")]
 post_gmmaY = mcmc[,which(vn=="gamma_Y")]
 post_S_A = mcmc[,which(vn=="S_A")]
-tmp = rnorm(Nsims*2,0,1); tmp = tmp[tmp>-.5]
+tmp = rnorm(Nsims*2.5,0,2); tmp = sample(tmp[tmp>-2 & tmp<3],Nsims)
 pri_S_A = exp(-exp(tmp - 3.5))
 df_post_SA = data.frame(Estimate = c(rep("Prior",length(pri_S_A)),
                                      rep("Posterior",length(post_S_A)) ),
@@ -31,7 +31,7 @@ plt1 = ggplot(df_post_SA,aes(x=Value,group=Estimate,fill=Estimate)) +
   theme_classic()
 #
 post_S_Y = mcmc[,which(vn=="S_Y")]
-tmp = rnorm(Nsims*2.5,0,1); tmp = sample(tmp[tmp>-.5],Nsims)
+tmp = rnorm(Nsims*2.5,0,2); tmp = sample(tmp[tmp>0 & tmp<3],Nsims)
 pri_S_Y = exp(-exp(-3.5 + tmp + post_gmmaA ))
 df_post_SY = data.frame(Estimate = c(rep("Prior",length(pri_S_Y)),
                                      rep("Posterior",length(post_S_Y)) ),

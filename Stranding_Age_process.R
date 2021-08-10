@@ -20,6 +20,7 @@ for(y in Year1str:YearT){
                 (df_Strd$YYYY==y & df_Strd$MM<3 & (is.na(df_Strd$Best_GLG) | df_Strd$Best_GLG > 0) ) |
                 (df_Strd$YYYY==(y-1) & df_Strd$MM>8 & (is.na(df_Strd$Best_GLG) | df_Strd$Best_GLG > 0)))
   StrOA[t] = length(ii)
+  # Loop through age classes to calculate # stranded by age
   for (a in 1:(NAge-1)){
     if(a<(NAge-1)){
       ii = which( (df_Strd$YYYY==y & df_Strd$MM>2 & df_Strd$MM<9 & df_Strd$Best_GLG == a+1) | 

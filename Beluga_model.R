@@ -50,33 +50,34 @@ source("Stranding_Age_process.R")
 # coefs = coef(fitdist(P_rnd,"beta")); upsilon = round(coefs[1]/P)
 # rm(P_rnd,coefs,N,P,J,N_ob,N_jv)
 upsilon = 245
+tau = 10 ;
 #
 # Initialize Beluga matrix with 12 stages, 9 age classes: 
 #  stages 1:8 = ages 0-7 (both sexes), stage 9 = 8+ males, 
 #  stages 10 = 8+ fems "available", 11 = 8+ fems preg, 12 = 8+ fems w. calves
 #    (Priors for vital rates based on estimates from Mosnier 2014)
-Sn = .7     # newborn calf survival (from 0.5 yr old to 1.5 yr old at next survey)
+Sn = .4     # newborn calf survival (from 0.5 yr old to 1.5 yr old at next survey)
 Snn = sqrt(Sn) # neonate survival (birth to time of survey, Sept 1)
-Sy = .85   # yearling survival (1.5 to 2.5 year old)
+Sy = .96   # yearling survival (1.5 to 2.5 year old)
 Sc = Snn * sqrt(Sy)
-Sa = .95   # adult survival (annual survival for 2yr old and older)
+Sa = .97   # adult survival (annual survival for 2yr old and older)
 Pr = .5    # pregnancy rate (for "available" females)
 source("Make_matrix.R")
 M = Make_matrix(Snn,Sc,Sy,Sa,Pr)
-lambda = eigen(M); lambda = lambda$values[1]
+lambda = eigen(M); lambda = Re(lambda$values[1])
 ssd=abs(eigen(M)$vectors[,1]); ssd = ssd/sum(ssd)  # stable stage distribution 
 nt = ssd*1000; Nt = sum(nt)
 for(t in 1:100){
   nt = M %*% nt
   Nt = c(Nt,sum(nt))
 }
-# plot(Nt)
+plot(Nt)
 #
 stan.data <- list(Nyrs=Nyrs,NyrsH=NyrsH,NStg=NStg,NAge=NAge,
                   Nsrv=Nsrv,Nstr=Nstr,YrSv=YrSv,YrSt=YrSt,AgeC=Agects,
                   ObsS=ObsS,invSc=invSc,PJ=PJ,StrNB=StrNB,StrOA=StrOA,
-                  ssd=ssd,Harv=Harv,upsilon=upsilon) # 
-parms <- c("ppp","Tstat","Tstat_new","sig_N","sig_P","sig_H","tau","PD_NB",
+                  ssd=ssd,Harv=Harv,upsilon=upsilon) # tau=tau
+parms <- c("ppp","Tstat","Tstat_new","sig_N","sig_P","sig_H","PD_NB",
            "PD_OA","S_A","S_Y","S_C_mn","S_N_mn","Pr_mn","alpha","phi",
            "gamma_A","gamma_Y","gamma_N","gamma_H_mn","Pr","S_N",
            "N","ppn_J","ppn_Av","ppn_Pr","ppn_Wc","ynew") # 
@@ -124,7 +125,7 @@ source("cmdstan_sumstats.r")
 #
 # Diagnostic Plots -------------------------------------
 #
-mcmc_trace(fit$draws("tau"))
+# mcmc_trace(fit$draws("tau"))
 mcmc_trace(fit$draws("gamma_A"))
 #
 set.seed(123)
@@ -156,10 +157,10 @@ mcmc_areas(fit$draws(variables = c("sig_P","sig_N","sig_H")),
   labs(x="Parameter value",y="Posterior sample density") +
   theme_classic()
 #
-mcmc_areas(fit$draws(variables = c("tau")),
+mcmc_areas(fit$draws(variables = c("phi")),
            area_method="equal height",
-           prob = 0.8) + 
-  ggtitle("Posterior distributions, precision param for age distribution") +
+           prob = 0.8) +
+  ggtitle("Posterior distribution, density dependent log hazard ratio") +
   labs(x="Parameter value",y="Posterior sample density") +
   theme_classic()
 #
@@ -210,7 +211,7 @@ Spred_hi = sumstats[which(startsWith(vns,"S_N[")),7]
 df_Splt = data.frame(Year=Years,Spred=Spred,
                      Spred_lo=Spred_lo,Spred_hi=Spred_hi)
 #
-ggplot(df_Splt[which(Years>1989),],aes(x=Year,y=Spred)) +
+plt_SvNb = ggplot(df_Splt[which(Years>1982 & Years<2014),],aes(x=Year,y=Spred)) +
   geom_ribbon(aes(ymin=Spred_lo,ymax=Spred_hi),alpha=0.3) +
   geom_line() +
   labs(x="Year",y="Estimated survival rate, newborns") +
@@ -223,13 +224,15 @@ Ppred_hi = sumstats[which(startsWith(vns,"Pr[")),7]
 df_Pplt = data.frame(Year=Years,Ppred=Ppred,
                      Ppred_lo=Ppred_lo,Ppred_hi=Ppred_hi)
 #
-ggplot(df_Pplt[which(Years>1989),],aes(x=Year,y=Ppred)) +
+plt_PrgRt = ggplot(df_Pplt[which(Years>1982 & Years<2014),],aes(x=Year,y=Ppred)) +
   geom_ribbon(aes(ymin=Ppred_lo,ymax=Ppred_hi),alpha=0.3) +
   geom_line() +
   labs(x="Year",y="Estimated pregancy rate") +
   ggtitle("Beluga adult pregnancy rate, model projections (1990-2012)") +
   theme_classic()
 #
+grid.arrange(plt_SvNb,plt_PrgRt)
+
 P_Av_pred = sumstats[which(startsWith(vns,"ppn_Av[")),1]
 P_Av_pred_lo = sumstats[which(startsWith(vns,"ppn_Av[")),5]
 P_Av_pred_hi = sumstats[which(startsWith(vns,"ppn_Av[")),7]
