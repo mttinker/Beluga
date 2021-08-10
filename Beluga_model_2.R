@@ -20,11 +20,12 @@ initvec = read_excel("data/Beluga_data.xlsx",sheet = 1)
 Harvest = read_excel("data/Beluga_data.xlsx",sheet = 2)
 Hv_ages = read_excel("data/Beluga_data.xlsx",sheet = 3)
 df_Surv = read_excel("data/Beluga_data.xlsx",sheet = 4)
-#df_Strd = read_excel("data/Beluga_data.xlsx",sheet = 5)
-df_Strd = read_excel("data/Strandings1983-2020_20210802.xlsx")
+df_Strd = read_excel("data/Beluga_data.xlsx",sheet = 5)
+# df_Strd = read_excel("data/Strandings1983-2020_20210802.xlsx")
 # Process data -------------------------------------------
 Year1 = min(Harvest$Year) ; 
-YearT = max(df_Strd$YYYY) ;
+#YearT = max(df_Strd$YYYY) ;
+YearT = max(df_Strd$Year) ;
 Years = seq(Year1,YearT)  ;
 YearsN = Years - Year1 + 1
 Nyrs = max(YearsN) ;
@@ -39,7 +40,12 @@ PJ = df_Surv$Prop_juv
 Harv = pmax(0.01,Harvest$Removals)
 # Process stranding data: group counts by survey year (Oct - Sept)
 #  and make matrix of age at death vectors for 1+ ages
-source("Stranding_Age_process.R")
+# source("Stranding_Age_process.R")
+#
+StrNB = df_Strd$NB_shift
+StrOA = df_Strd$Older_shift
+YrSt = df_Strd$Year - Year1 + 1
+Nstr = length(YrSt)
 #
 # Determine appropriate precision param for Beta dist, proportion Juveniles
 # (assuming binomial distrib. of raw counts of Juvs vs all animals)
@@ -73,7 +79,7 @@ for(t in 1:100){
 plot(Nt)
 #
 stan.data <- list(Nyrs=Nyrs,NyrsH=NyrsH,NStg=NStg,NAge=NAge,
-                  Nsrv=Nsrv,Nstr=Nstr,YrSv=YrSv,YrSt=YrSt,AgeC=Agects,
+                  Nsrv=Nsrv,Nstr=Nstr,YrSv=YrSv,YrSt=YrSt,
                   ObsS=ObsS,invSc=invSc,PJ=PJ,StrNB=StrNB,StrOA=StrOA,
                   ssd=ssd,Harv=Harv,upsilon=upsilon) # 
 parms <- c("ppp","Tstat","Tstat_new","sig_N","sig_P","sig_H","PD_NB",
@@ -84,7 +90,7 @@ parms <- c("ppp","Tstat","Tstat_new","sig_N","sig_P","sig_H","PD_NB",
 # Fit model ---------------------------------------------
 nburnin = 500                    # number warm-up (burn-in) samples
 nsamples = 5000                 # desired total number samples
-fitmodel = c("Beluga_fit.stan")    # name of file with stan code
+fitmodel = c("Beluga_fit_2.stan")    # name of file with stan code
 cores = detectCores()
 ncore = min(20,cores-4)
 Niter = round(nsamples/ncore)
@@ -195,7 +201,7 @@ Spred_hi = sumstats[which(startsWith(vns,"S_N[")),7]
 df_Splt = data.frame(Year=Years,Spred=Spred,
                      Spred_lo=Spred_lo,Spred_hi=Spred_hi)
 #
-plt_SvNb = ggplot(df_Splt[which(Years>1982 & Years<2014),],aes(x=Year,y=Spred)) +
+plt_SvNb = ggplot(df_Splt[which(Years>1982 & Years<2013),],aes(x=Year,y=Spred)) +
   geom_ribbon(aes(ymin=Spred_lo,ymax=Spred_hi),alpha=0.3) +
   geom_line() +
   labs(x="Year",y="Estimated survival rate, newborns") +
@@ -208,7 +214,7 @@ Ppred_hi = sumstats[which(startsWith(vns,"Pr[")),7]
 df_Pplt = data.frame(Year=Years,Ppred=Ppred,
                      Ppred_lo=Ppred_lo,Ppred_hi=Ppred_hi)
 #
-plt_PrgRt = ggplot(df_Pplt[which(Years>1982 & Years<2014),],aes(x=Year,y=Ppred)) +
+plt_PrgRt = ggplot(df_Pplt[which(Years>1982 & Years<2013),],aes(x=Year,y=Ppred)) +
   geom_ribbon(aes(ymin=Ppred_lo,ymax=Ppred_hi),alpha=0.3) +
   geom_line() +
   labs(x="Year",y="Estimated pregancy rate") +
@@ -240,21 +246,21 @@ plt_pAv = ggplot(df_Femstg_plt[which(df_Femstg_plt$Year>1982 & df_Femstg_plt$Sta
   geom_ribbon(aes(ymin=Prop_lo,ymax=Prop_hi),alpha=0.3) +
   geom_line() +
   labs(x="Year",y="Estimated proportion females") +
-  ggtitle("Beluga female status (1983-2020): Proportion Available") +
+  ggtitle(paste0("Beluga female status (1983-",as.character(YearT),"): Proportion Available")) +
   theme_classic()
 plt_pPr = ggplot(df_Femstg_plt[which(df_Femstg_plt$Year>1982 & df_Femstg_plt$Status=="Pregnant" ),],
                  aes(x=Year,y=Prop)) +  # group=Status,color=Status,fill=Status
   geom_ribbon(aes(ymin=Prop_lo,ymax=Prop_hi),alpha=0.3) +
   geom_line() +
   labs(x="Year",y="Estimated proportion females") +
-  ggtitle("Beluga female status (1983-2020): Proportion Pregnant") +
+  ggtitle(paste0("Beluga female status (1983-",as.character(YearT),"): Proportion Pregnant")) +
   theme_classic()
 plt_pWc = ggplot(df_Femstg_plt[which(df_Femstg_plt$Year>1982 & df_Femstg_plt$Status=="With_calf" ),],
                  aes(x=Year,y=Prop)) +  # group=Status,color=Status,fill=Status
   geom_ribbon(aes(ymin=Prop_lo,ymax=Prop_hi),alpha=0.3) +
   geom_line() +
   labs(x="Year",y="Estimated proportion females") +
-  ggtitle("Beluga female status (1983-2020): Proportion With calf") +
+  ggtitle(paste0("Beluga female status (1983-",as.character(YearT),"): Proportion With Calf")) +
   theme_classic()
 #
 PJpred = sumstats[which(startsWith(vns,"ppn_J[")),1]
@@ -273,18 +279,18 @@ plt_pJv = ggplot(df_PJplt[which(Years>1982),],aes(x=Year,y=PJpred)) +
   geom_point(aes(y=PJ_obs)) +
   geom_errorbar(aes(ymin=PJ_obs-1.96*PJ_obs_se,ymax=PJ_obs+1.96*PJ_obs_se)) +
   labs(x="Year",y="Estimated proportion juvenile") +
-  ggtitle("Beluga survey age structure (1983-2020)") +
+  ggtitle(paste0("Beluga survey age structure (1983-",as.character(YearT),")")) +
   theme_classic()
 #
 grid.arrange(grobs=list(plt_pAv,plt_pPr,plt_pWc,plt_pJv),nrow=4)
 #
 source("Compare_priors.R")
 # Save Results -----------------------------------------------------------
-fit$save_object(file = paste0("results/beluga_rslt_",Sys.Date(),"_fit.RDS"))
+fit$save_object(file = paste0("results/beluga_2_rslt_",Sys.Date(),"_fit.RDS"))
 # fit = readRDS(paste0(filename))
 
 rm(fit,mod)
-save.image(file=paste0("results/beluga_rslt_",Sys.Date(),".rdata"))
+save.image(file=paste0("results/beluga_2_rslt_",Sys.Date(),".rdata"))
 
-fit = readRDS(paste0("results/beluga_rslt_",Sys.Date(),"_fit.RDS"))
+fit = readRDS(paste0("results/beluga_2_rslt_",Sys.Date(),"_fit.RDS"))
 

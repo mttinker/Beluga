@@ -48,7 +48,7 @@ data {
   real<lower=0,upper=1> PJ[Nsrv];// Proportion juveniles in surveys
   int<lower=0> StrNB[Nstr] ;     // Stranding counts of newborns
   int<lower=0> StrOA[Nstr] ;     // Stranding counts of older animals
-  int<lower=0> AgeC[Nstr,NAge-1];// stranding counts by age (cols) & year (rows)
+  // int<lower=0> AgeC[Nstr,NAge-1];// stranding counts by age (cols) & year (rows)
   simplex[NStg] ssd ;            // Initial stage distribution
   vector<lower=0>[NyrsH] Harv ;  // Harvest totals by year
   real upsilon ;                 // precision param for ppn juveniles
@@ -90,7 +90,7 @@ transformed parameters {
   vector[Nyrs] nd_NB ;                 // expected number NB carcasses detected
   vector[Nyrs] nd_OA ;                 // expected number older carcasses detected
   vector[NyrsH] Harv_expect ;          // expected harvest numbers
-  vector[NAge-1] Agvc[Nyrs] ;          // expected carcass age dist, all years
+  // vector[NAge-1] Agvc[Nyrs] ;          // expected carcass age dist, all years
   // Year 1
   N[1] = exp(8.5+logNinit) ;
   n[1] = N[1] * ssd ;
@@ -148,7 +148,7 @@ transformed parameters {
     nd[1] = nd[1] + n[t-1][11] * S_A * (1-S_N[t]) ;
     nd_NB[t] = nd[1]+.001 ;
     nd_OA[t] = sum(nd[2:NAge])+.001 ;
-    Agvc[t] = (nd[2:NAge] + .00000001) / (sum(nd[2:NAge]) + (NAge-1) * .00000001 ) ; 
+    // Agvc[t] = (nd[2:NAge] + .00000001) / (sum(nd[2:NAge]) + (NAge-1) * .00000001 ) ; 
   }
 }
 // Section 4. Estimating model parameters (drawing from probability distributions)
@@ -165,9 +165,9 @@ model {
   // -Stranding counts, older animals
   StrOA ~ poisson( PD_OA * nd_OA[YrSt]) ;     
   // -Age vectors of stranded animals
-  for(i in 1:Nstr){
-    AgeC[i,] ~ multinomial(Agvc[YrSt[i]]) ;
-  }
+  // for(i in 1:Nstr){
+  //   AgeC[i,] ~ multinomial(Agvc[YrSt[i]]) ;
+  // }
   //
   // B) Prior distributions for model parameters:
   // Hierarchical random effects:  
