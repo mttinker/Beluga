@@ -90,7 +90,7 @@ parms <- c("ppp","Tstat","Tstat_new","sig_N","sig_P","sig_H","PD_NB",
 # Fit model ---------------------------------------------
 nburnin = 500                    # number warm-up (burn-in) samples
 nsamples = 5000                 # desired total number samples
-fitmodel = c("Beluga_fit_2.stan")    # name of file with stan code
+fitmodel = c("Beluga_fit_basic.stan")    # name of file with stan code
 cores = detectCores()
 ncore = min(20,cores-4)
 Niter = round(nsamples/ncore)
@@ -286,11 +286,11 @@ grid.arrange(grobs=list(plt_pAv,plt_pPr,plt_pWc,plt_pJv),nrow=4)
 #
 source("Compare_priors.R")
 # Save Results -----------------------------------------------------------
-fit$save_object(file = paste0("results/beluga_2_rslt_",Sys.Date(),"_fit.RDS"))
+fit$save_object(file = paste0("results/beluga_base_rslt_",Sys.Date(),"_fit.RDS"))
 # fit = readRDS(paste0(filename))
 
 rm(fit,mod)
-save.image(file=paste0("results/beluga_2_rslt_",Sys.Date(),".rdata"))
+save.image(file=paste0("results/beluga_base_rslt_",Sys.Date(),".rdata"))
 
-fit = readRDS(paste0("results/beluga_2_rslt_",Sys.Date(),"_fit.RDS"))
+fit = readRDS(paste0("results/beluga_base_rslt_",Sys.Date(),"_fit.RDS"))
 
