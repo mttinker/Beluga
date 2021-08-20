@@ -30,7 +30,7 @@ caption {
 
 # Summary
 
-This report summarizes the results of an analysis St. Lawrence Beluga population dynamics, based on the most recent available data on aerial surveys and stranded carcass data. An age-structured population model is fit to these data using Bayesian methods: the model includes age-dependent survival, stochasticity in pregnancy rates and newborn survival, harvest mortality and density dependence. Two competing causes of death -  natural mortality (with age-based variation and density-dependent effects) and harvest mortality - are incorporated as competing risks using a proportional hazards formulation. The model is intended be re-fit each year or as new data become available, and the report updated.
+This report summarizes the results of an analysis St. Lawrence Beluga population dynamics, based on the most recent available data on aerial surveys and stranded carcass data. An age-structured population model is fit to these data using Bayesian Markov Chain Monte Carlo (MCMC) methods. The model includes age-dependent survival, stochasticity in pregnancy rates and newborn survival rates. Two major causes of death -  natural mortality (with age-based variation and density-dependent effects) and harvest mortality - are incorporated in the model as competing risks using a proportional hazards formulation. The model is intended to be re-fit each year or as new data become available, and the report updated.
 
 ```{r install libraries and load data, include=FALSE, warning=FALSE}
 # This code chunk simply makes sure that all the libraries used here are 
@@ -58,19 +58,17 @@ The structure of the population model follows the process model described by Mos
 
 <br/>
 
-(ref:Fig1cap) Graphical representation of a beluga population model. A) Loop diagram showing all possible demographic transitions between the 12 age/sex classes, with transition probability equations shown adjacent to each arrow. B) Timeline of population model time steps, which correspond to the timing of aerial surveys in early September of each year, with births occurring 1-3 months before the survey. Neonatal survival ($S_{nn}$) corresponds to survival from birth to the first survey in which the age-0 calf is tracked by the model (stage n[1]), while newborn survival ($S_{n}$) corresponds to survival from stage n[1] to stage n[2] (the yearling age class).
-
 ```{r Fig1, echo=FALSE, fig.cap='(ref:Fig1cap)', out.width = '100%'}
 knitr::include_graphics("images/Beluga_loop.png")
 ```
+(ref:Fig1cap) Graphical representation of a beluga population model. A) Loop diagram showing all possible demographic transitions between the 12 age/sex classes, with transition probability equations shown adjacent to each arrow. B) Timeline of population model time steps, which correspond to the timing of aerial surveys in early September of each year, with births occurring 1-3 months before the survey. Neonatal survival ($S_{nn}$) corresponds to survival from birth to the first survey in which the age-0 calf is tracked by the model (stage n[1]), while newborn survival ($S_{n}$) corresponds to survival from stage n[1] to stage n[2] (the yearling age class).
 
 <br/>
-
-(ref:Fig2cap) Projection matrix $\mathbf{M}$, showing all stage transition probabilities calculated as functions of one or more vital rates.
 
 ```{r Fig2, echo=FALSE, fig.cap='(ref:Fig2cap)', out.width = '100%'}
 knitr::include_graphics("images/Beluga_matrix.png")
 ```
+(ref:Fig2cap) Projection matrix $\mathbf{M}$, showing all stage transition probabilities calculated as functions of one or more vital rates.
 
 <br/>
 
@@ -237,21 +235,18 @@ kable(statsum,digits=3,
 
 <br/>
 
-(ref:Fig3cap) Trace plots for two of the estimated parameters, illustrating mixing of multiple chains of posterior samples.  
-
-```{r Fig3, echo=FALSE, fig.cap='(ref:Fig3cap)', out.width = '80%', fig.asp = 1.8}
+```{r Fig3, echo=FALSE, warning=FALSE, message=FALSE, fig.cap='(ref:Fig3cap)', out.width = '60%', fig.asp = 1.8}
 
 plt_trace1 = mcmc_trace(fit$draws("logN1"))
 plt_trace2 = mcmc_trace(fit$draws("gamma_A"))
 grid.arrange(plt_trace1,plt_trace2)
 
 ```
+(ref:Fig3cap) Trace plots for two of the estimated parameters, illustrating mixing of multiple chains of posterior samples.  
 
 <br/>
 
-(ref:Fig4cap) Posterior predictive plots, comparing distributions of randomly generated "new" (out-of-sample) data with observed data from aerial surveys. Top panel shows frequency histogram of survey counts for observed vs. new data. Lower panel shows a scatter plot of discrepancy measure statistics (sum of squared Pearson residuals) for posterior samples of observed vs. new data, and the associated Bayesian-P value. For a well-fit model, the cloud of points shpuld be scattered around the 1:1 line, and the Bayesian-P value should be between 0.1 and 0.9.  
-
-```{r Fig4, echo=FALSE, fig.cap='(ref:Fig4cap)', out.width = '80%', fig.asp = 1.8}
+```{r Fig4, echo=FALSE, warning=FALSE, message=FALSE, fig.cap='(ref:Fig4cap)', out.width = '60%', fig.asp = 1.6}
 
 set.seed(123)
 rr = sample(Nsims,1000)
@@ -277,17 +272,15 @@ plt_ppc2 = ggplot(df_ppc,aes(x=x,y=y)) +
 grid.arrange(plt_ppc1,plt_ppc2)
 
 ```
+(ref:Fig4cap) Posterior predictive plots, comparing distributions of randomly generated "new" (out-of-sample) data with observed data from aerial surveys. Top panel shows frequency histogram of survey counts for observed vs. new data. Lower panel shows a scatter plot of discrepancy measure statistics (sum of squared Pearson residuals) for posterior samples of observed vs. new data, and the associated Bayesian-P value. For a well-fit model, the cloud of points shpuld be scattered around the 1:1 line, and the Bayesian-P value should be between 0.1 and 0.9.  
 
 <br/>
 
 The estimates of Beluga vital rates were consistent with those estimated previously by Mosnier et al. (2015): adult age classes had a high survival rate of over 90%, with a low degree of estimation uncertainty (a narrow credible interval); yearling survival was slightly lower than adult survival with somewhat more estimation uncertainty; and estimates of mean survival rates of newborns and neonatal calves (the latter corresponding to survival probability from birth to survey) were even lower with considerable estimation uncertainty (Table \@ref(tab:Table2), Figure \@ref(fig:Fig5)). The estimated mean pregnancy rate had the highest level of estimation uncertainty (Figure \@ref(fig:Fig5)). However, it is important to note that the posterior distributions for all vital rate estimates showed reduced variance and provide much more precise estimates than their prior distributions (Figure \@ref(fig:Fig6)). 
 
-
 <br/>
 
-(ref:Fig5cap) Posterior distributions for model-estimated vital rates, computed as derived parameters from log hazard rates. Each density plot shows the distribution of posterior samples: the dark line shows the mean value and the shaded areas indicate the 90% CI. Mean values are shown for newborn and neonatal survival and pregnancy rates, as these vital rates vary from year to year due to environmental stochasticity and density dependent effects.  
-
-```{r Fig5, echo=FALSE, fig.cap='(ref:Fig5cap)', out.width = '80%', fig.asp = 1.5}
+```{r Fig5, echo=FALSE, warning=FALSE, message=FALSE, fig.cap='(ref:Fig5cap)', out.width = '80%', fig.asp = 1.1}
 
 mcmc_areas(fit$draws(variables = c("S_A","S_Y","S_N_mn","S_NN_mn","Pr_mn")),
            area_method="equal height",
@@ -300,12 +293,11 @@ mcmc_areas(fit$draws(variables = c("S_A","S_Y","S_N_mn","S_NN_mn","Pr_mn")),
   theme_classic()
 
 ```
+(ref:Fig5cap) Posterior distributions for model-estimated vital rates (computed as derived parameters from log hazard rates). Each density plot shows the distribution of posterior samples: the dark line shows the mean value and the shaded areas indicate the 90% CI. Mean values are shown for newborn and neonatal survival and pregnancy rates, as these vital rates vary from year to year due to environmental stochasticity and density dependent effects.  
 
 <br/>
 
-(ref:Fig6cap) Comparison of prior vs. posterior distributions for model-estimated vital rates, computed as derived parameters from log hazard rates. Note that survival estimates exclude any effects of harvest, and mean values are shown for neonatal survival and pregnancy rates, both of which vary from year to year due to environmental stochasticity and (in the case of neonatal survival) density dependent effects. 
-
-```{r Fig6, echo=FALSE, fig.cap='(ref:Fig6cap)', out.width = '80%', fig.asp = .8}
+```{r Fig6, echo=FALSE, warning=FALSE, message=FALSE, fig.cap='(ref:Fig6cap)', out.width = '80%', fig.asp = .8}
 
 post_gmmaA = mcmc[,which(vn=="gamma_A")]
 post_gmmaY = mcmc[,which(vn=="gamma_Y")]
@@ -366,9 +358,158 @@ rm(tmp,tmp2)
 grid.arrange(grobs=list(plt1,plt3,plt2,plt4),nrow=2)
 
 ```
+(ref:Fig6cap) Comparison of prior vs. posterior distributions for model-estimated vital rates (computed as derived parameters from log hazard rates). Note that survival estimates exclude any effects of harvest, and mean values are shown for neonatal survival and pregnancy rates, both of which vary from year to year due to environmental stochasticity and (in the case of neonatal survival) density dependent effects. 
 
 <br/>
 
+The estimated patterns of temporal variation in neonatal/newborn survival rates and pregnancy rates (since the initiation of aerial surveys around 1990) are also in good agreement with those reported by Mosnier et al. (2015), as illustrated in Figure \@ref(fig:Fig7). Specific features of this variation include cyclical "peaks and valleys" in both vital rates, with peaks in pregnancy rates occurring in 1996, 2000 and 2011, and peaks in newborn survival (equivalent to valleys in mortality) occurring in 2001, 2004-06, and 2009. Also evident was an overall tendency towards lower and more variable newborn survival after 1999 (Figure \@ref(fig:Fig7)a). Because the model tracks females with differing reproductive status as distinct stages of the population, we can easily examine temporal trends in the relative proportion of females in each state (Figure \@ref(fig:Fig8)). Not surprisingly, such an examination reveals that peaks in pregnancy rates are associated with corresponding peaks in the proportion of adult females that are pregnant (e.g. year 2000; Figure \@ref(fig:Fig8)b) as well as peaks in the numbers of females with calves the following year (e.g. year 2001; Figure \@ref(fig:Fig8)c). The combined trends in vital rates and female reproductive status result in good agreement between the predicted and observed proportions of the population composed of juvenile animals (Figure \@ref(fig:Fig8)d), a metric which exhibits greater volatility and a declining trend after 1999. 
+
+Other model results that are consistent with previous findings (Mosnier et al. 2015) include a low rate of carcass detection for stranded newborns (~6%) as compared to older animals (~ 25%; Figure \@ref(fig:Fig9)), and the estimated trends in overall abundance, which show a pronounced decline over the first half of the last century up to approximately 1960 (when harvests were discontinued), followed by a period of stagnant growth up until approximately 1999, after which there appears to be a declining trend (Figure \@ref(fig:Fig10)). 
+
+<br/>
+
+```{r Fig7, echo=FALSE, warning=FALSE, message=FALSE, fig.cap='(ref:Fig7cap)', out.width = '80%', fig.asp = 1.1}
+
+Spred = sumstats[which(startsWith(vns,"S_NN[")),1]
+Spred_lo = sumstats[which(startsWith(vns,"S_NN[")),5]
+Spred_hi = sumstats[which(startsWith(vns,"S_NN[")),7]
+df_Splt = data.frame(Year=Years,Spred=Spred,
+                     Spred_lo=Spred_lo,Spred_hi=Spred_hi)
+#
+plt_SvNb = ggplot(df_Splt[which(Years>1982 & Years<2013),],aes(x=Year,y=Spred)) +
+  geom_ribbon(aes(ymin=Spred_lo,ymax=Spred_hi),alpha=0.3) +
+  geom_line() +
+  labs(x="Year",y="Estimated survival rate, neonates") +
+  ggtitle("Beluga neonatal survival, model projections (1990-2012)") +
+  theme_classic()
+#
+Ppred = sumstats[which(startsWith(vns,"Pr[")),1]
+Ppred_lo = sumstats[which(startsWith(vns,"Pr[")),5]
+Ppred_hi = sumstats[which(startsWith(vns,"Pr[")),7]
+df_Pplt = data.frame(Year=Years,Ppred=Ppred,
+                     Ppred_lo=Ppred_lo,Ppred_hi=Ppred_hi)
+#
+plt_PrgRt = ggplot(df_Pplt[which(Years>1982 & Years<2013),],aes(x=Year,y=Ppred)) +
+  geom_ribbon(aes(ymin=Ppred_lo,ymax=Ppred_hi),alpha=0.3) +
+  geom_line() +
+  labs(x="Year",y="Estimated pregancy rate") +
+  ggtitle("Beluga adult pregnancy rate, model projections (1990-2012)") +
+  theme_classic()
+#
+grid.arrange(plt_SvNb,plt_PrgRt)
+
+```
+(ref:Fig7cap) Ribbon plots illustrating temporal variation in neonatal survival rates (top panel) and pregnancy rates (lower panel). Black lines show the mean trends while shaded grey ribbons show the 95% credible intervals around the annual estimates.
+
+<br/>
+
+```{r Fig8, echo=FALSE, warning=FALSE, message=FALSE, fig.cap='(ref:Fig8cap)', out.width = '80%', fig.asp = 1.2}
+
+P_Av_pred = sumstats[which(startsWith(vns,"ppn_Av[")),1]
+P_Av_pred_lo = sumstats[which(startsWith(vns,"ppn_Av[")),5]
+P_Av_pred_hi = sumstats[which(startsWith(vns,"ppn_Av[")),7]
+P_Pr_pred = sumstats[which(startsWith(vns,"ppn_Pr[")),1]
+P_Pr_pred_lo = sumstats[which(startsWith(vns,"ppn_Pr[")),5]
+P_Pr_pred_hi = sumstats[which(startsWith(vns,"ppn_Pr[")),7]
+P_Wc_pred = sumstats[which(startsWith(vns,"ppn_Wc[")),1]
+P_Wc_pred_lo = sumstats[which(startsWith(vns,"ppn_Wc[")),5]
+P_Wc_pred_hi = sumstats[which(startsWith(vns,"ppn_Wc[")),7]
+df_Femstg_plt = data.frame(Year=Years,Status=rep("Available",Nyrs),Prop=P_Av_pred,
+                                               Prop_lo=P_Av_pred_lo,Prop_hi=P_Av_pred_hi)
+df_Femstg_plt = rbind(df_Femstg_plt,data.frame(Year=Years,Status=rep("Pregnant",Nyrs),
+                                               Prop=P_Pr_pred,
+                                               Prop_lo=P_Pr_pred_lo,Prop_hi=P_Pr_pred_hi) )
+df_Femstg_plt = rbind(df_Femstg_plt,data.frame(Year=Years,Status=rep("With_calf",Nyrs),
+                                               Prop=P_Wc_pred,
+                                               Prop_lo=P_Wc_pred_lo,Prop_hi=P_Wc_pred_hi) )                      
+#
+plt_pAv = ggplot(df_Femstg_plt[which(df_Femstg_plt$Year>1982 & df_Femstg_plt$Status=="Available" ),],
+                 aes(x=Year,y=Prop)) +  # group=Status,color=Status,fill=Status
+  geom_ribbon(aes(ymin=Prop_lo,ymax=Prop_hi),alpha=0.3) +
+  geom_line() +
+  labs(x="Year",y="Estimate") +
+  ggtitle(paste0("Beluga female status (1983-",as.character(YearT),"): Proportion Available")) +
+  theme_classic()
+plt_pPr = ggplot(df_Femstg_plt[which(df_Femstg_plt$Year>1982 & df_Femstg_plt$Status=="Pregnant" ),],
+                 aes(x=Year,y=Prop)) +  # group=Status,color=Status,fill=Status
+  geom_ribbon(aes(ymin=Prop_lo,ymax=Prop_hi),alpha=0.3) +
+  geom_line() +
+  labs(x="Year",y="Estimate") +
+  ggtitle(paste0("Beluga female status (1983-",as.character(YearT),"): Proportion Pregnant")) +
+  theme_classic()
+plt_pWc = ggplot(df_Femstg_plt[which(df_Femstg_plt$Year>1982 & df_Femstg_plt$Status=="With_calf" ),],
+                 aes(x=Year,y=Prop)) +  # group=Status,color=Status,fill=Status
+  geom_ribbon(aes(ymin=Prop_lo,ymax=Prop_hi),alpha=0.3) +
+  geom_line() +
+  labs(x="Year",y="Estimate") +
+  ggtitle(paste0("Beluga female status (1983-",as.character(YearT),"): Proportion With Calf")) +
+  theme_classic()
+#
+PJpred = sumstats[which(startsWith(vns,"ppn_J[")),1]
+PJpred_lo = sumstats[which(startsWith(vns,"ppn_J[")),4]
+PJpred_hi = sumstats[which(startsWith(vns,"ppn_J[")),8]
+df_PJplt = data.frame(Year=Years,PJpred=PJpred,
+                      PJpred_lo=PJpred_lo,PJpred_hi=PJpred_hi)
+df_PJplt$PJ_obs = rep(NA,Nyrs); df_PJplt$PJ_obs_se = rep(NA,Nyrs)
+df_PJplt$PJ_obs[YrSv] = PJ
+N_ob = round(df_Surv$`Pop size estimate`/(2.021*2.09))
+N_jv = PJ*N_ob ; se = sqrt(N_ob*PJ*(1-PJ)); CV = se/N_jv
+df_PJplt$PJ_obs_se[YrSv] = CV*PJ
+plt_pJv = ggplot(df_PJplt[which(Years>1982),],aes(x=Year,y=PJpred)) +
+  geom_ribbon(aes(ymin=PJpred_lo,ymax=PJpred_hi),alpha=0.3) +
+  geom_line() +
+  geom_point(aes(y=PJ_obs)) +
+  geom_errorbar(aes(ymin=PJ_obs-1.96*PJ_obs_se,ymax=PJ_obs+1.96*PJ_obs_se)) +
+  labs(x="Year",y="Estimate") +
+  ggtitle(paste0("Beluga survey age structure (1983-",
+                 as.character(YearT),"): Proportion Juvenile")) +
+  theme_classic()
+#
+grid.arrange(grobs=list(plt_pAv,plt_pPr,plt_pWc,plt_pJv),nrow=4)
+
+```
+(ref:Fig8cap) Ribbon plots illustrating temporal variation in the proportion of adult females in each of 3 reproductive states (top 3 panels) and Beluga population age structure (bottom panel). In the bottom panel, the observed proportions of juvenile animals (based on aerial photographic surveys) are plotted for comparison, with points showing survey point estimates and error bars showing the associated standard errors (based on sampling variance of a binomial distribution). In all plots the black lines show the mean trends while shaded grey ribbons show the 95% credible intervals around the annual estimates.
+
+<br/>
+
+```{r Fig9, echo=FALSE, warning=FALSE, message=FALSE, fig.cap='(ref:Fig9cap)', out.width = '60%', fig.asp = 0.8}
+
+mcmc_areas(fit$draws(variables = c("theta_NB","theta_OA")),
+           area_method="equal height",
+           prob = 0.8) + 
+  scale_y_discrete(labels=c("Prob detect Newborn","Prob detect Older")) +
+  ggtitle("Posterior distributions, carcass detection probabilities") +
+  labs(x="Parameter value",y="Posterior sample density") +
+  theme_classic()
+
+```
+(ref:Fig9cap) Posterior distributions for model-estimated probabilities of carcass detection for stranded Beluga whales of two age classes, newborns and older animals. Each density plot shows the distribution of posterior samples: the dark line shows the mean value and the shaded areas indicate the 90% CI. 
+
+<br/>
+
+```{r Fig10, echo=FALSE, warning=FALSE, message=FALSE, fig.cap='(ref:Fig10cap)', out.width = '80%', fig.asp = 0.8}
+
+Npred = sumstats[which(startsWith(vns,"N[")),1]
+Npred_lo = sumstats[which(startsWith(vns,"N[")),4]
+Npred_hi = sumstats[which(startsWith(vns,"N[")),8]
+df_Nplt = data.frame(Year=Years,Npred=Npred,
+                       Npred_lo=Npred_lo,Npred_hi=Npred_hi)
+df_Nplt$Survey_est = rep(NA,Nyrs); df_Nplt$Survey_est_SE = rep(NA,Nyrs)
+df_Nplt$Survey_est[YrSv] = ObsS; df_Nplt$Survey_est_SE[YrSv] = sqrt(VarS)
+#
+ggplot(df_Nplt[which(Years>1925),],aes(x=Year,y=Npred)) +
+  geom_ribbon(aes(ymin=Npred_lo,ymax=Npred_hi),alpha=0.3) +
+  geom_line() +
+  geom_point(aes(y=Survey_est)) +
+  geom_errorbar(aes(ymin=Survey_est-Survey_est_SE,ymax=Survey_est+Survey_est_SE)) +
+  labs(x="Year",y="Estimated Abundance") +
+  ggtitle("Beluga population abundance, model projections (1925-2012)") +
+  theme_classic()
+
+```
+(ref:Fig10cap) Ribbon plot illustrating estimated trends in abundance of the St. Lawrence Beluga population. The observed abundance estimates from aerial photographic surveys are plotted for comparison, with points showing mean survey estimates and error bars showing the associated standard errors. The black line shows the mean model-estimated abundance while the shaded grey ribbon shows the 95% credible interval.
+
+<br/>
 
 # Literature Cited
 Carpenter, B., A. Gelman, M. D. Hoffman, D. Lee, B. Goodrich, M. Betancourt, M. Brubaker, J. Guo, P. Li, and A. Riddell. 2017. Stan: A Probabilistic Programming Language. Journal of statistical software 76:32.
@@ -382,4 +523,5 @@ Mosnier, A., T. Doniol-Valcroze, J.-F. Gosselin, V. Lesage, L. N. Measures, and 
 Raftery, A. E., and S. M. Lewis. 1995. The number of iterations, convergence diagnostics and generic Metropolis algorithms. Practical Markov Chain Monte Carlo 7:763–773.
 
 R.Core.Team. 2014. R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria.
+
 
