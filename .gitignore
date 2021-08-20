@@ -3,6 +3,9 @@
 .Rapp.history
 # Session Data files
 .RData
+.rdata
+.RDS
+.rds
 # User-specific files
 .Ruserdata
 # Example code in package build process
@@ -28,8 +31,9 @@ vignettes/*.pdf
 .Renviron
 # Compiled executables
 *.exe
-
 # Resuts files
+*.rdata
+*.RDS
 /results/
 /results/*.*
 Beluga_fit.exe

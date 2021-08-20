@@ -15,11 +15,24 @@ require(cmdstanr)
 require(posterior)
 rstan::rstan_options(javascript=FALSE)
 # NOTE: need to load results file first
+#
+post_N1 = exp(mcmc[,which(vn=="logN1")])
+pri_N1 = exp(rnorm(Nsims,8.5,1))
+df_post_N = data.frame(Estimate = c(rep("Prior",length(pri_N1)),
+                                     rep("Posterior",length(post_N1)) ),
+                        Value = c(pri_N1,post_N1)) 
+df_post_N$Estimate = factor(df_post_N$Estimate)
+ggplot(df_post_N,aes(x=Value,group=Estimate,fill=Estimate)) +
+  geom_density(adjust=1.5,alpha=0.3) +
+  scale_x_continuous(limits = c(0,50000)) +
+  ggtitle("Prior vs Posterior, Initial population size") +
+  theme_classic() 
+#
 post_gmmaA = mcmc[,which(vn=="gamma_A")]
 post_gmmaY = mcmc[,which(vn=="gamma_Y")]
 post_S_A = mcmc[,which(vn=="S_A")]
 tmp = rnorm(Nsims*2.5,0,2); tmp = sample(tmp[tmp>-2 & tmp<3],Nsims)
-pri_S_A = exp(-exp(tmp - 3.5))
+pri_S_A = exp(-exp(tmp - 2.25))
 df_post_SA = data.frame(Estimate = c(rep("Prior",length(pri_S_A)),
                                      rep("Posterior",length(post_S_A)) ),
                         Value = c(pri_S_A,post_S_A)) 
@@ -28,11 +41,11 @@ plt1 = ggplot(df_post_SA,aes(x=Value,group=Estimate,fill=Estimate)) +
   geom_density(adjust=1.5,alpha=0.3) +
   scale_x_continuous(limits = c(0,1)) +
   ggtitle("Prior vs Posterior, Adult Survival") +
-  theme_classic()
+  theme_classic() + theme(legend.position = "none")
 #
 post_S_Y = mcmc[,which(vn=="S_Y")]
 tmp = rnorm(Nsims*2.5,0,2); tmp = sample(tmp[tmp>0 & tmp<3],Nsims)
-pri_S_Y = exp(-exp(-3.5 + tmp + post_gmmaA ))
+pri_S_Y = exp(-exp(-2.25 + tmp + post_gmmaA ))
 df_post_SY = data.frame(Estimate = c(rep("Prior",length(pri_S_Y)),
                                      rep("Posterior",length(post_S_Y)) ),
                         Value = c(pri_S_Y,post_S_Y)) 
@@ -41,20 +54,20 @@ plt2 = ggplot(df_post_SY,aes(x=Value,group=Estimate,fill=Estimate)) +
   geom_density(adjust=1.5,alpha=0.3) +
   scale_x_continuous(limits = c(0,1)) +
   ggtitle("Prior vs Posterior, Yearling Survival") +
-  theme_classic()
+  theme_classic() + theme(legend.position = "none")
 #
-post_S_N = mcmc[,which(vn=="S_N_mn")]
-tmp = rnorm(Nsims*2.5,0,1); tmp = sample(tmp[tmp>-2 & tmp<2],Nsims)
+post_S_NN = mcmc[,which(vn=="S_NN_mn")]
+tmp = rnorm(Nsims*2.5,0,1); tmp = sample(tmp[tmp>-3 & tmp<3],Nsims)
 tmp2 = rnorm(Nsims*2.5,0,1); tmp2 = sample(tmp2[tmp2>0],Nsims)
-pri_S_N = sqrt(exp(-exp(-.365 + tmp + 0.1*tmp2)))
-df_post_SN = data.frame(Estimate = c(rep("Prior",length(pri_S_N)),
-                                     rep("Posterior",length(post_S_N)) ),
-                        Value = c(pri_S_N,post_S_N)) 
+pri_S_NN = (exp(-exp(-.85 + tmp + 0.1*tmp2)))
+df_post_SN = data.frame(Estimate = c(rep("Prior",length(pri_S_NN)),
+                                     rep("Posterior",length(post_S_NN)) ),
+                        Value = c(pri_S_NN,post_S_NN)) 
 df_post_SN$Estimate = factor(df_post_SN$Estimate)
 plt3 = ggplot(df_post_SN,aes(x=Value,group=Estimate,fill=Estimate)) +
   geom_density(adjust=1.5,alpha=0.3) +
   scale_x_continuous(limits = c(0,1)) +
-  ggtitle("Prior vs Posterior, Newborn Survival (mean)") +
+  ggtitle("Prior vs Posterior, Neonatal Survival (mean)") +
   theme_classic()
 #
 post_Pr = mcmc[,which(vn=="Pr_mn")]
@@ -71,7 +84,7 @@ plt4 = ggplot(df_post_Pr,aes(x=Value,group=Estimate,fill=Estimate)) +
   theme_classic()
 #
 rm(tmp,tmp2)
-grid.arrange(grobs=list(plt1,plt2,plt3,plt4),nrow=4)
+grid.arrange(grobs=list(plt1,plt3,plt2,plt4),nrow=2)
 
 
 
